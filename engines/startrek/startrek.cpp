@@ -82,6 +82,10 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_mouseControllingShip = false;
 	_keyboardControlsMouse = true;
 
+	_resetGameMode = false;
+	_pendingLoadSlot = -1;
+	_pendingRestart = false;
+
 	_inQuitGameMenu = false;
 	_textDisplayMode = TEXTDISPLAY_SUBTITLES;
 	_textboxVar2 = 0;
@@ -142,6 +146,7 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_missionEndFlag = 0;
 	_returnedFromAwayMission = false;
 	_randomEncounterType = 0;
+	_randomEncounterCountdown = -1;
 	_lastMissionId = -1;
 	Common::fill(_missionPoints, _missionPoints + 7, 0);
 
@@ -208,6 +213,19 @@ Common::Error StarTrekEngine::run() {
 		initSpaceObjects();
 	}
 
+	if (isCd) {
+		// The text display mode is asked for once
+		bool askTextDisplayMode = !loadedSave && loadTextDisplayMode() == -1;
+		if (askTextDisplayMode) {
+			_gfx->loadPalette("bridge");
+			_gfx->clearScreenAndPriBuffer();
+			_gfx->fadeinScreen();
+		}
+		showTextConfigurationMenu(false);
+		if (askTextDisplayMode)
+			_gfx->fadeoutScreen();
+	}
+
 	if (!loadedSave) {
 		if (isCd || !isDemo) {
 			_missionToLoad = "DEMON";
@@ -263,6 +281,7 @@ void StarTrekEngine::restartGame() {
 	_targetPlanet = -1;
 	_currentPlanet = -1;
 	_randomEncounterType = 0;
+	_randomEncounterCountdown = -1;
 	_lastMissionId = -1;
 	Common::fill(_missionPoints, _missionPoints + 7, 0);
 	_missionToLoad = "DEMON";
@@ -301,6 +320,15 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 
 	while (true) {
 		if (_resetGameMode) {
+			if (_pendingRestart) {
+				_pendingRestart = false;
+				restartGame();
+			}
+			if (_pendingLoadSlot != -1) {
+				int slot = _pendingLoadSlot;
+				_pendingLoadSlot = -1;
+				loadGame(slot);
+			}
 			if (!_sound->_loopingAudioName.empty())
 				_sound->playVoc(_sound->_loopingAudioName);
 			_resetGameMode = false;
