@@ -874,6 +874,8 @@ int StarTrekEngine::showStarMap() {
 
 		switch (event.type) {
 		case TREKEVENT_TICK:
+			cycleBridgeColors();
+			_gfx->updateScreen();
 			_frameIndex++;
 			break;
 
