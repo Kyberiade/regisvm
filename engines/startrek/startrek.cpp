@@ -552,7 +552,7 @@ void StarTrekEngine::syncSoundSettings() {
 
 void StarTrekEngine::showMacLogo(uint32 ticks) {
 	const char *appName;
-	if (getFeatures() & GF_DEMO)
+	if (isMacDemo())
 		appName = "Star Trek\xc2\xae Demo";
 	else if (getFeatures() & GF_CDROM)
 		appName = "Star Trek\xc2\xae Enhanced CD-ROM";
