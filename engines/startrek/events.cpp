@@ -26,6 +26,7 @@ namespace StarTrek {
 void StarTrekEngine::pollEvents(bool queueEvents) {
 	Common::Event event;
 	TrekEvent trekEvent;
+	bool mouseMoved = false;
 	while (_eventMan->pollEvent(event)) {
 		trekEvent.mouse = event.mouse;
 		trekEvent.kbd = event.kbd;
@@ -45,10 +46,7 @@ void StarTrekEngine::pollEvents(bool queueEvents) {
 				trekEvent.type = TREKEVENT_MOUSEMOVE;
 				addEventToQueue(trekEvent);
 			}
-
-			// WORKAROUND: this improves the responsiveness of the mouse.
-			_system->updateScreen();
-			_system->delayMillis(10);
+			mouseMoved = true;
 			break;
 
 		case Common::EVENT_LBUTTONDOWN:
@@ -85,6 +83,11 @@ void StarTrekEngine::pollEvents(bool queueEvents) {
 			break;
 		}
 	}
+
+	// WORKAROUND: this improves the responsiveness of the mouse. A fast mouse
+	// sends many events, so the screen is updated once for all of them.
+	if (mouseMoved)
+		_system->updateScreen();
 }
 
 void StarTrekEngine::waitForNextTick(bool queueEvents) {
