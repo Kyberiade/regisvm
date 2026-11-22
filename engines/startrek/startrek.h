@@ -116,14 +116,6 @@ const int MAX_BAN_FILES = 16;
 
 
 
-enum kDebugLevels {
-	kDebugSound = 1,
-	kDebugGraphics,
-	kDebugSavegame,
-	kDebugSpace,
-	kDebugGeneral,
-};
-
 enum GameMode {
 	GAMEMODE_START = 0,
 	GAMEMODE_BRIDGE,

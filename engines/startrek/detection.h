@@ -33,6 +33,14 @@
 
 namespace StarTrek {
 
+enum kDebugLevels {
+	kDebugSound = 1,
+	kDebugGraphics,
+	kDebugSavegame,
+	kDebugSpace,
+	kDebugGeneral,
+};
+
 enum StarTrekGameType {
 	GType_ST25 = 1,
 	GType_STJR = 2
