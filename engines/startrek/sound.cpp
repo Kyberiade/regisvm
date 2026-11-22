@@ -535,8 +535,13 @@ void Sound::toggleSfx() {
 	setSfxEnabled(!_vm->_sfxEnabled);
 }
 
+// The sampled sound effects of the Amiga and Mac versions don't need the CD
+bool Sound::canToggleSfx() const {
+	return _vm->_sfxWorking || _amigaPlayer || _macPlayer;
+}
+
 void Sound::setSfxEnabled(bool enable) {
-	if (!_vm->_sfxWorking || _vm->_sfxEnabled == enable)
+	if (!canToggleSfx() || _vm->_sfxEnabled == enable)
 		return;
 
 	_vm->_sfxEnabled = enable;

@@ -78,6 +78,7 @@ public:
 	void playSoundEffectIndex(SoundEffects index);
 	void setMusicEnabled(bool enable);
 	void setSfxEnabled(bool enable);
+	bool canToggleSfx() const;
 	void toggleMusic();
 	void toggleSfx();
 	void syncSoundSettings();

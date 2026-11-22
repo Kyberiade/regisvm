@@ -347,13 +347,13 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 	int choiceIndex = 0;
 	int scrollOffset = 0;
 	if (tmpTextDisplayMode != TEXTDISPLAY_WAIT && tmpTextDisplayMode != TEXTDISPLAY_SUBTITLES
-	        && numChoices == 1 && _sfxEnabled && !_sfxWorking)
+	        && numChoices == 1 && !_sfxWorking)
 		_textboxHasMultipleChoices = false;
 	else
 		_textboxHasMultipleChoices = true;
 
 	if (tmpTextDisplayMode >= TEXTDISPLAY_WAIT && tmpTextDisplayMode <= TEXTDISPLAY_NONE
-	        && _sfxEnabled && !_sfxWorking)
+	        && !_sfxWorking)
 		_textboxVar6 = true;
 	else
 		_textboxVar6 = false;

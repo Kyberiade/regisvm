@@ -201,7 +201,7 @@ void StarTrekEngine::showOptionsMenu(int x, int y) {
 	} else
 		disabledButtons |= (1 << OPTIONBUTTON_ENABLEMUSIC) | (1 << OPTIONBUTTON_DISABLEMUSIC);
 
-	if (_sfxWorking) {
+	if (_sound->canToggleSfx()) {
 		if (_sfxEnabled)
 			disabledButtons |= (1 << OPTIONBUTTON_ENABLESFX);
 		else
