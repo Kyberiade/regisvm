@@ -24,6 +24,7 @@
 #include "startrek/resource.h"
 
 #include "common/algorithm.h"
+#include "common/array.h"
 #include "common/config-manager.h"
 #include "common/events.h"
 #include "common/file.h"
@@ -250,14 +251,12 @@ void Graphics::decPaletteFadeLevel() {
 
 void Graphics::loadPri(const Common::String &priFile) {
 	Common::MemoryReadStream *priStream = _vm->_resource->loadFile(priFile + ".pri");
-	priStream->read(_priData, SCREEN_WIDTH * SCREEN_HEIGHT / 2);
-	delete priStream;
 
-	// The Amiga version has four bitplanes, the lowest bit first
 	if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		// The Amiga version has four bitplanes, the lowest bit first
 		const int planeSize = SCREEN_WIDTH * SCREEN_HEIGHT / 8;
-		byte planes[SCREEN_WIDTH * SCREEN_HEIGHT / 2];
-		memcpy(planes, _priData, sizeof(planes));
+		Common::Array<byte> planes(SCREEN_WIDTH * SCREEN_HEIGHT / 2);
+		priStream->read(planes.data(), planes.size());
 		for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
 			byte value = 0;
 			for (int plane = 0; plane < 4; plane++) {
@@ -265,11 +264,15 @@ void Graphics::loadPri(const Common::String &priFile) {
 					value |= 1 << plane;
 			}
 			if (i % 2)
-				_priData[i / 2] = (_priData[i / 2] & 0xf0) | value;
+				_priData[i / 2] |= value;
 			else
-				_priData[i / 2] = (_priData[i / 2] & 0x0f) | (value << 4);
+				_priData[i / 2] = value << 4;
 		}
+	} else {
+		priStream->read(_priData, SCREEN_WIDTH * SCREEN_HEIGHT / 2);
 	}
+
+	delete priStream;
 }
 
 void Graphics::clearPri() {
