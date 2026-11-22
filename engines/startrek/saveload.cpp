@@ -130,7 +130,10 @@ bool StarTrekEngine::showOriginalSaveMenu() {
 			// A new game gets the slot after the newest one
 			int slot = saves.empty() ? 1 : saves[0].getSaveSlot() + 1;
 			for (int i = 1; slot > metaEngine->getMaximumSaveSlot() && i <= metaEngine->getMaximumSaveSlot(); i++) {
-				if (!metaEngine->querySaveMetaInfos(_targetName.c_str(), i).isValid() && i != metaEngine->getAutosaveSlot())
+				bool used = i == metaEngine->getAutosaveSlot();
+				for (uint j = 0; j < saves.size() && !used; j++)
+					used = saves[j].getSaveSlot() == i;
+				if (!used)
 					slot = i;
 			}
 			if (slot > metaEngine->getMaximumSaveSlot()) {
@@ -753,7 +756,7 @@ Common::String StarTrekEngine::getSavegameFilename(int slotId) const {
 
 
 // Static function (reused in detection.cpp)
-bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta) {
+bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta, bool skipThumbnail) {
 	Common::Serializer ser(in, out);
 
 	ser.syncAsUint32LE(meta->version);
