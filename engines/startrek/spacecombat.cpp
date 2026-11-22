@@ -204,7 +204,7 @@ void StarTrekEngine::updateEnemyShip(R3 *ship) {
 		int16 pitch = angleAsin(safeFixedDiv(local.y, distance));
 		int16 yaw = -angleAtan2((int16)local.x, (int16)local.z);
 		ship->commandedSpeed = ship->maxSpeed;
-		ship->targetTurnRate = Point3((int32)pitch << 16, (int32)yaw << 16, 0);
+		ship->targetTurnRate = Point3((int32)pitch * 65536, (int32)yaw * 65536, 0);
 		moveR3(ship);
 		return;
 	}
@@ -239,7 +239,7 @@ void StarTrekEngine::updateEnemyShip(R3 *ship) {
 	int16 pitch = -angleAsin(safeFixedDiv(local.y, distance));
 	int16 yaw = angleAtan2((int16)local.x, (int16)local.z);
 	ship->commandedSpeed = speed;
-	ship->targetTurnRate = Point3((int32)pitch << 16, (int32)yaw << 16, 0);
+	ship->targetTurnRate = Point3((int32)pitch * 65536, (int32)yaw * 65536, 0);
 	moveR3(ship);
 }
 
