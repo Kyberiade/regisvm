@@ -1522,13 +1522,13 @@ bool StarTrekEngine::sub_1c022(R3 *r3) {
 	// The original uses 32-bit products, which may overflow
 	uint32 divisor = (uint32)_starfieldPointDivisor;
 	uint32 radius = (uint32)r3->field22;
-	int32 horizontal, vertical;
-
+	int32 horizontal;
 	if (p.x <= 0)
 		horizontal = (int32)(divisor * ((uint32)p.x + radius) + (uint32)_starfieldXVar2 * (uint32)p.z);
 	else
 		horizontal = (int32)((uint32)p.z * (uint32)_starfieldXVar2 - ((uint32)p.x - radius) * divisor);
 
+	int32 vertical;
 	if (p.y <= 0)
 		vertical = (int32)(((uint32)p.y + radius) * divisor + (uint32)p.z * (uint32)_starfieldYVar2);
 	else
