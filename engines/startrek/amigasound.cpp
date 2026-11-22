@@ -26,8 +26,9 @@
 #include "audio/decoders/raw.h"
 #include "audio/mods/protracker.h"
 
+#include "startrek/amigasound.h"
 #include "startrek/resource.h"
-#include "startrek/sound.h"
+#include "startrek/startrek.h"
 
 namespace StarTrek {
 
@@ -201,40 +202,48 @@ static Common::MemoryReadStream *convertP41A(const byte *data, uint32 size, cons
 	return new Common::MemoryReadStream(mod, modSize, DisposeAfterUse::YES);
 }
 
-void Sound::loadAmigaMusicFile(const Common::String &baseSoundName) {
-	_amigaTracks = nullptr;
-	_amigaTrackCount = 0;
+AmigaSoundPlayer::AmigaSoundPlayer(StarTrekEngine *vm) : _vm(vm), _tracks(nullptr), _trackCount(0), _musicTrack(-1), _bank(nullptr), _bankSize(0) {
+}
+
+AmigaSoundPlayer::~AmigaSoundPlayer() {
+	stop(true, true);
+	delete[] _bank;
+}
+
+void AmigaSoundPlayer::loadMusicFile(const Common::String &baseSoundName) {
+	_tracks = nullptr;
+	_trackCount = 0;
 	for (int i = 0; i < ARRAYSIZE(kAmigaMusicFiles); i++) {
 		if (baseSoundName.equalsIgnoreCase(kAmigaMusicFiles[i].name)) {
-			_amigaTracks = kAmigaMusicFiles[i].tracks;
-			_amigaTrackCount = kAmigaMusicFiles[i].count;
+			_tracks = kAmigaMusicFiles[i].tracks;
+			_trackCount = kAmigaMusicFiles[i].count;
 		}
 	}
 }
 
-void Sound::playAmigaTrack(int track, bool music) {
-	if (track < 0 || track >= _amigaTrackCount)
+void AmigaSoundPlayer::playTrack(int track, bool music) {
+	if (track < 0 || track >= _trackCount)
 		return;
 
-	int value = _amigaTracks[track];
+	int value = _tracks[track];
 	// Songs always play as music
 	if (!((value > 0 || music) ? _vm->_musicEnabled : _vm->_sfxEnabled))
 		return;
 
-	Audio::SoundHandle *handle = music ? &_amigaMusicHandle : nullptr;
+	Audio::SoundHandle *handle = music ? &_musicHandle : nullptr;
 	if (value > 0) {
-		_amigaMusicTrack = track;
-		playAmigaSong(value);
+		_musicTrack = track;
+		playSong(value);
 	} else if (value < 0) {
 		if (music)
-			_amigaMusicTrack = track;
-		playAmigaSoundEffect(-value, handle);
+			_musicTrack = track;
+		playSoundEffect(-value, handle);
 	}
 }
 
-void Sound::playAmigaSong(int song) {
+void AmigaSoundPlayer::playSong(int song) {
 	Audio::Mixer *mixer = _vm->_system->getMixer();
-	mixer->stopHandle(_amigaMusicHandle);
+	mixer->stopHandle(_musicHandle);
 
 	if (song <= 0 || song >= (int)strlen(kAmigaSongBanks))
 		return;
@@ -243,17 +252,17 @@ void Sound::playAmigaSong(int song) {
 	Common::String songName = Common::String::format("TREK%d%c.SNG", song, toupper(bank));
 	Common::String bankName = Common::String::format("samples.%c", bank);
 
-	if (_amigaBankName != bankName) {
+	if (_bankName != bankName) {
 		Common::File file;
 		if (!file.open(Common::Path(bankName))) {
 			warning("Could not open the sample bank %s", bankName.c_str());
 			return;
 		}
-		delete[] _amigaBank;
-		_amigaBankSize = file.size();
-		_amigaBank = new byte[_amigaBankSize];
-		file.read(_amigaBank, _amigaBankSize);
-		_amigaBankName = bankName;
+		delete[] _bank;
+		_bankSize = file.size();
+		_bank = new byte[_bankSize];
+		file.read(_bank, _bankSize);
+		_bankName = bankName;
 	}
 
 	Common::MemoryReadStreamEndian *songFile = _vm->_resource->loadFile(songName);
@@ -262,7 +271,7 @@ void Sound::playAmigaSong(int song) {
 	songFile->read(data, size);
 	delete songFile;
 
-	Common::MemoryReadStream *module = convertP41A(data, size, _amigaBank, _amigaBankSize);
+	Common::MemoryReadStream *module = convertP41A(data, size, _bank, _bankSize);
 	delete[] data;
 	if (!module)
 		return;
@@ -271,10 +280,10 @@ void Sound::playAmigaSong(int song) {
 	Audio::AudioStream *stream = Audio::makeProtrackerStream(module);
 	delete module;
 	if (stream)
-		mixer->playStream(Audio::Mixer::kMusicSoundType, &_amigaMusicHandle, stream);
+		mixer->playStream(Audio::Mixer::kMusicSoundType, &_musicHandle, stream);
 }
 
-void Sound::playAmigaSoundEffect(int effect, Audio::SoundHandle *handle) {
+void AmigaSoundPlayer::playSoundEffect(int effect, Audio::SoundHandle *handle) {
 	// Some sound effects have random variations
 	if (effect == 3)
 		effect += _vm->getRandomWord() % 5;
@@ -288,10 +297,10 @@ void Sound::playAmigaSoundEffect(int effect, Audio::SoundHandle *handle) {
 
 	Audio::Mixer *mixer = _vm->_system->getMixer();
 	if (!handle) {
-		handle = &_amigaSfxHandles[0];
+		handle = &_sfxHandles[0];
 		for (int i = 0; i < MAX_SFX_PLAYING; i++) {
-			if (!mixer->isSoundHandleActive(_amigaSfxHandles[i])) {
-				handle = &_amigaSfxHandles[i];
+			if (!mixer->isSoundHandleActive(_sfxHandles[i])) {
+				handle = &_sfxHandles[i];
 				break;
 			}
 		}
@@ -313,18 +322,28 @@ void Sound::playAmigaSoundEffect(int effect, Audio::SoundHandle *handle) {
 	mixer->playStream(Audio::Mixer::kSFXSoundType, handle, stream);
 }
 
-void Sound::stopAmigaSounds(bool music, bool soundEffects) {
+void AmigaSoundPlayer::stop(bool music, bool soundEffects) {
 	Audio::Mixer *mixer = _vm->_system->getMixer();
 	if (music)
-		mixer->stopHandle(_amigaMusicHandle);
+		mixer->stopHandle(_musicHandle);
 	if (soundEffects) {
 		for (int i = 0; i < MAX_SFX_PLAYING; i++)
-			mixer->stopHandle(_amigaSfxHandles[i]);
+			mixer->stopHandle(_sfxHandles[i]);
 	}
 }
 
-bool Sound::isAmigaMusicPlaying() const {
-	return _vm->_system->getMixer()->isSoundHandleActive(_amigaMusicHandle);
+bool AmigaSoundPlayer::isMusicPlaying() const {
+	return _vm->_system->getMixer()->isSoundHandleActive(_musicHandle);
+}
+
+bool AmigaSoundPlayer::isPlaying() const {
+	if (isMusicPlaying())
+		return true;
+	for (int i = 0; i < MAX_SFX_PLAYING; i++) {
+		if (_vm->_system->getMixer()->isSoundHandleActive(_sfxHandles[i]))
+			return true;
+	}
+	return false;
 }
 
 } // End of namespace StarTrek

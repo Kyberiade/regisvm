@@ -25,7 +25,8 @@
 #include "audio/mac/halestorm.h"
 #include "audio/mixer.h"
 
-#include "startrek/sound.h"
+#include "startrek/macsound.h"
+#include "startrek/startrek.h"
 
 namespace StarTrek {
 
@@ -91,50 +92,53 @@ private:
 	Common::MacResManager _resFork;
 };
 
-bool Sound::initMacSound() {
-	_macLoader = new MacSoundLoader();
-	if (!_macLoader->open()) {
+bool MacSoundPlayer::init() {
+	_loader = new MacSoundLoader();
+	if (!_loader->open()) {
 		warning("Couldn't find 'Star Trek Audio'. Continuing without music");
 		return false;
 	}
 
-	_macDriver = new Audio::HalestormDriver(_macLoader, _vm->_system->getMixer());
-	if (!_macDriver->init(true, Audio::HalestormDriver::kSimple, 2, false))
+	_driver = new Audio::HalestormDriver(_loader, _vm->_system->getMixer());
+	if (!_driver->init(true, Audio::HalestormDriver::kSimple, 2, false))
 		return false;
 	// Like the original on a 68040: 4 song voices (3 of them polyphonic), 2 sound
 	// effect voices, 22 kHz with interpolation
-	_macDriver->changeSystemVoices(4, 3, 2);
-	_macDriver->doCommand(Audio::HalestormDriver::kSetRateAndIntrplMode, 5);
+	_driver->changeSystemVoices(4, 3, 2);
+	_driver->doCommand(Audio::HalestormDriver::kSetRateAndIntrplMode, 5);
 
 	syncSoundSettings();
 	return true;
 }
 
-void Sound::deinitMacSound() {
-	delete _macDriver;
-	delete _macLoader;
+MacSoundPlayer::MacSoundPlayer(StarTrekEngine *vm) : _vm(vm), _loader(nullptr), _driver(nullptr), _tracks(nullptr), _trackCount(0), _musicTrack(-1) {
 }
 
-void Sound::syncSoundSettings() {
-	if (!_macDriver)
+MacSoundPlayer::~MacSoundPlayer() {
+	delete _driver;
+	delete _loader;
+}
+
+void MacSoundPlayer::syncSoundSettings() {
+	if (!_driver)
 		return;
 
 	bool mute = ConfMan.hasKey("mute") && ConfMan.getBool("mute");
-	_macDriver->setMusicVolume(mute ? 0 : CLIP<int>(ConfMan.getInt("music_volume"), 0, Audio::Mixer::kMaxMixerVolume));
-	_macDriver->setSoundEffectVolume(mute ? 0 : CLIP<int>(ConfMan.getInt("sfx_volume"), 0, Audio::Mixer::kMaxMixerVolume));
+	_driver->setMusicVolume(mute ? 0 : CLIP<int>(ConfMan.getInt("music_volume"), 0, Audio::Mixer::kMaxMixerVolume));
+	_driver->setSoundEffectVolume(mute ? 0 : CLIP<int>(ConfMan.getInt("sfx_volume"), 0, Audio::Mixer::kMaxMixerVolume));
 }
 
-void Sound::loadMacMusicFile(const Common::String &baseSoundName) {
-	_macTracks = nullptr;
-	_macTrackCount = 0;
-	if (!_macDriver)
+void MacSoundPlayer::loadMusicFile(const Common::String &baseSoundName) {
+	_tracks = nullptr;
+	_trackCount = 0;
+	if (!_driver)
 		return;
 
 	for (int i = 0; i < ARRAYSIZE(kMacMusicFiles); i++) {
 		if (baseSoundName.equalsIgnoreCase(kMacMusicFiles[i].name)) {
-			_macTracks = kMacMusicFiles[i].tracks;
-			_macTrackCount = kMacMusicFiles[i].count;
-			_macDriver->registerSamples(kMacMusicFiles[i].samples, false);
+			_tracks = kMacMusicFiles[i].tracks;
+			_trackCount = kMacMusicFiles[i].count;
+			_driver->registerSamples(kMacMusicFiles[i].samples, false);
 			return;
 		}
 	}
@@ -142,18 +146,18 @@ void Sound::loadMacMusicFile(const Common::String &baseSoundName) {
 	warning("Unknown music file '%s'", baseSoundName.c_str());
 }
 
-void Sound::playMacTrack(int track, bool music) {
-	if (!_macDriver || track < 0 || track >= _macTrackCount)
+void MacSoundPlayer::playTrack(int track, bool music) {
+	if (!_driver || track < 0 || track >= _trackCount)
 		return;
 
-	int16 id = _macTracks[track];
+	int16 id = _tracks[track];
 	if (id < 0)
 		return;
 
 	debugC(6, kDebugSound, "Playing Mac track %d (%d)", track, id);
 	if (id >= kMacFirstSoundEffect) {
 		if (_vm->_sfxEnabled)
-			_macDriver->startSoundEffect(id);
+			_driver->startSoundEffect(id);
 		return;
 	}
 	if (!_vm->_musicEnabled)
@@ -165,25 +169,25 @@ void Sound::playMacTrack(int track, bool music) {
 		if (kMacLoopingSongs[i] == id)
 			command = Audio::HalestormDriver::kSongPlayLoop;
 	}
-	_macDriver->doCommand(command, id);
+	_driver->doCommand(command, id);
 	if (music)
-		_macMusicTrack = track;
+		_musicTrack = track;
 }
 
-void Sound::stopMacSounds(bool music, bool soundEffects) {
-	if (!_macDriver)
+void MacSoundPlayer::stop(bool music, bool soundEffects) {
+	if (!_driver)
 		return;
 
 	if (music) {
-		_macDriver->doCommand(Audio::HalestormDriver::kSongAbort);
-		_macMusicTrack = -1;
+		_driver->doCommand(Audio::HalestormDriver::kSongAbort);
+		_musicTrack = -1;
 	}
 	if (soundEffects)
-		_macDriver->stopAllSoundEffects();
+		_driver->stopAllSoundEffects();
 }
 
-bool Sound::isMacMusicPlaying() const {
-	return _macDriver && _macDriver->doCommand(Audio::HalestormDriver::kSongIsPlaying);
+bool MacSoundPlayer::isMusicPlaying() const {
+	return _driver && _driver->doCommand(Audio::HalestormDriver::kSongIsPlaying);
 }
 
 } // End of namespace StarTrek

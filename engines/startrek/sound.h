@@ -34,12 +34,13 @@ class MacResManager;
 }
 
 namespace Audio {
-class HalestormDriver;
 class RewindableAudioStream;
 }
 
 namespace StarTrek {
 
+class AmigaSoundPlayer;
+class MacSoundPlayer;
 class StarTrekEngine;
 
 
@@ -107,36 +108,9 @@ private:
 	 */
 	Audio::RewindableAudioStream *openCDSound(const Common::String &name, bool *loop);
 
-	// The Amiga version plays songs of "The Player 4.1A" and sampled sound effects
-	void loadAmigaMusicFile(const Common::String &baseSoundName);
-	void playAmigaTrack(int track, bool music);
-	void playAmigaSong(int song);
-	void playAmigaSoundEffect(int effect, Audio::SoundHandle *handle);
-	void stopAmigaSounds(bool music, bool soundEffects);
-	bool isAmigaMusicPlaying() const;
-
-	// The Mac versions play the songs and sound effects of "Star Trek Audio"
-	bool initMacSound();
-	void deinitMacSound();
-	void loadMacMusicFile(const Common::String &baseSoundName);
-	void playMacTrack(int track, bool music);
-	void stopMacSounds(bool music, bool soundEffects);
-	bool isMacMusicPlaying() const;
-
-	class MacSoundLoader *_macLoader;
-	Audio::HalestormDriver *_macDriver;
-	const int16 *_macTracks;
-	int _macTrackCount;
-	int _macMusicTrack;
-
-	const int8 *_amigaTracks;
-	int _amigaTrackCount;
-	int _amigaMusicTrack;
-	Audio::SoundHandle _amigaMusicHandle;
-	Audio::SoundHandle _amigaSfxHandles[MAX_SFX_PLAYING];
-	Common::String _amigaBankName;
-	byte *_amigaBank;
-	uint32 _amigaBankSize;
+	// The players of the Amiga and Mac versions, which replace the MIDI tracks
+	AmigaSoundPlayer *_amigaPlayer;
+	MacSoundPlayer *_macPlayer;
 
 	// MIDI-Related Variables
 	MidiDriver *_midiDriver;
