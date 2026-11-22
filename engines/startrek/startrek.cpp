@@ -95,6 +95,7 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 
 	_resetGameMode = false;
 	_pendingLoadSlot = -1;
+	_demoBattle = nullptr;
 	_pendingRestart = false;
 	_canSaveLoad = false;
 

@@ -208,14 +208,6 @@ struct TrekEvent {
 	uint32 tick;
 };
 
-// A message on the bridge in the battle of the DOS demo
-struct DemoMessage {
-	Common::String speaker;
-	Common::String text;
-	int16 x;
-	int16 y;
-};
-
 struct ComputerTopic {
 	Common::String fileName;
 	Common::String topic;
@@ -257,12 +249,15 @@ struct EnterpriseState {
 	}
 };
 
+class DosDemoBattle;
 class Graphics;
 class IWFile;
 class Sound;
 
 class StarTrekEngine : public ::Engine {
 protected:
+	friend class DosDemoBattle;
+
 	// startrek.cpp
 public:
 	StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gamedesc);
@@ -410,26 +405,6 @@ public:
 	const char *drawDosDemoTextbox(Sprite *sprite, const Common::String &speaker, const char *text, int16 x, int16 y);
 	void playDemoMontage();
 	void playDemoBattle();
-	void initDemoBattle();
-	void cleanupDemoBattle();
-	void initDemoShip(R3 *ship, int16 shape, int16 size, const int16 *strengths);
-	void updateDemoBattle();
-	void runDemoBattleScript();
-	void moveDemoKlingons();
-	void fireDemoKlingon(R3 *ship);
-	void fireDemoEnterprise();
-	void moveDemoShip(R3 *ship);
-	void updateDemoShipEnergy(R3 *ship);
-	void repairDemoShip(R3 *ship);
-	void handleDemoBattleEvent(const TrekEvent &event);
-	void handleDemoBattleKey(Common::KeyCode key);
-	void toggleDemoShields();
-	void toggleDemoWeapons();
-	void showDemoCrewMenu(int actor);
-	void addDemoBridgeMessage(const Common::String &speaker, const Common::String &text, int16 x, int16 y);
-	void updateDemoBridgeMessages();
-	void drawDemoShipPanels();
-	void drawDemoPanelBitmap(Bitmap *bitmap, int16 x, int16 y);
 	void applyDemoHit(R3 *ship, R3 *projectile);
 	void playDemoEnding();
 
@@ -1048,13 +1023,8 @@ public:
 	uint32 _demoPlaybackStartMillis;
 	Common::Point _demoMousePos;
 
-	// The battle of the DOS demo
-	int _demoBattleFrame;
-	int _demoFireTime;
-	uint32 _demoShieldMessageTime;
-	Common::List<DemoMessage> _demoMessages;
-	Sprite _demoMessageSprite;
-	int _demoMessageEnd;
+	// The battle of the DOS demo, while it runs
+	DosDemoBattle *_demoBattle;
 	R3 _orbitObjectR3;
 	R3 *_targetShip;
 	// Shared like the random number generator of the original

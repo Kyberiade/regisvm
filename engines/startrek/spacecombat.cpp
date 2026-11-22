@@ -19,6 +19,7 @@
  *
  */
 
+#include "startrek/dosdemobattle.h"
 #include "startrek/resource.h"
 #include "startrek/sound.h"
 #include "startrek/startrek.h"
@@ -632,10 +633,8 @@ void StarTrekEngine::applyDemoHit(R3 *ship, R3 *projectile) {
 		int16 strength = shield.strength;
 		int16 absorbed = MIN(damage, strength);
 		shield.strength -= absorbed;
-		if (shield.strength == 0 && absorbed != 0 && isEnterprise && _frameIndex > _demoShieldMessageTime) {
-			addDemoBridgeMessage("Scotty", Common::String::format("We just lost our %s shield!.", kSideNames[side]), 0, 150);
-			_demoShieldMessageTime = _frameIndex + 120;
-		}
+		if (shield.strength == 0 && absorbed != 0 && isEnterprise)
+			_demoBattle->reportLostShield(kSideNames[side]);
 		damage -= damage * strength / shield.maxStrength;
 	}
 
@@ -657,7 +656,7 @@ void StarTrekEngine::applyDemoHit(R3 *ship, R3 *projectile) {
 	hull.strength -= absorbed;
 	if (hull.strength >= 1) {
 		if (isEnterprise)
-			addDemoBridgeMessage("Scotty", Common::String::format("They've crippled the %s!", kSystemNames[area->system - 6]), 0, 160);
+			_demoBattle->addBridgeMessage("Scotty", Common::String::format("They've crippled the %s!", kSystemNames[area->system - 6]), 0, 160);
 	} else if (isEnterprise) {
 		const char *const text[] = { "", "Enterprise destroyed.", "" };
 		showDosDemoText(text);

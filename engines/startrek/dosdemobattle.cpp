@@ -20,6 +20,7 @@
  */
 
 
+#include "startrek/dosdemobattle.h"
 #include "startrek/graphics.h"
 #include "startrek/resource.h"
 #include "startrek/sound.h"
@@ -44,28 +45,31 @@ static const struct {
 	{ 756, Common::KEYCODE_SPACE }
 };
 
-// The Enterprise fights two Klingon ships, which fly along fixed paths
-void StarTrekEngine::playDemoBattle() {
-	initDemoBattle();
+DosDemoBattle::DosDemoBattle(StarTrekEngine *vm) : _vm(vm), _frame(0), _fireTime(0), _shieldMessageTime(0), _messageEnd(-1) {
+}
 
-	_demoBattleFrame = 0;
-	while (_demoBattleFrame < kDemoBattleFrames && !shouldQuit()) {
+// The Enterprise fights two Klingon ships, which fly along fixed paths
+void DosDemoBattle::play() {
+	init();
+
+	_frame = 0;
+	while (_frame < kDemoBattleFrames && !_vm->shouldQuit()) {
 		TrekEvent event;
-		if (!popNextEvent(&event))
+		if (!_vm->popNextEvent(&event))
 			continue;
 
 		if (event.type == TREKEVENT_TICK) {
-			updateDemoBattle();
-			_demoBattleFrame++;
+			update();
+			_frame++;
 		} else {
-			handleDemoBattleEvent(event);
+			handleEvent(event);
 		}
 	}
 
-	cleanupDemoBattle();
+	cleanup();
 }
 
-void StarTrekEngine::initDemoBattle() {
+void DosDemoBattle::init() {
 	static const struct {
 		int actor;
 		const char *anim;
@@ -73,80 +77,80 @@ void StarTrekEngine::initDemoBattle() {
 		{ 0, "kirk" }, { 1, "spock" }, { 5, "uhura" }, { 4, "chek" }, { 3, "sulu" }, { 6, "scott" }
 	};
 
-	_gfx->loadPalette("bridge");
-	_gfx->setBackgroundImage("bridge");
-	_gfx->loadPri("bridge");
-	_gfx->copyBackgroundScreen();
-	_gfx->toggleMouse(false);
-	_sound->playDemoMusic("sta8v1");
+	_vm->_gfx->loadPalette("bridge");
+	_vm->_gfx->setBackgroundImage("bridge");
+	_vm->_gfx->loadPri("bridge");
+	_vm->_gfx->copyBackgroundScreen();
+	_vm->_gfx->toggleMouse(false);
+	_vm->_sound->playDemoMusic("sta8v1");
 
-	initStarfieldPosition();
-	initStarfield(72, 30, 247, 102, 0x40);
-	initStarfieldSprite(&_starfieldSprite, new StubBitmap(0, 0), _starfieldRect);
+	_vm->initStarfieldPosition();
+	_vm->initStarfield(72, 30, 247, 102, 0x40);
+	_vm->initStarfieldSprite(&_vm->_starfieldSprite, new StubBitmap(0, 0), _vm->_starfieldRect);
 
 	for (int i = 0; i < ARRAYSIZE(kCrew); i++)
-		loadActorAnim(kCrew[i].actor, kCrew[i].anim, 0, 0, 1.0);
+		_vm->loadActorAnim(kCrew[i].actor, kCrew[i].anim, 0, 0, 1.0);
 
 	// The ship panels at the sides are drawn into the background
-	initStarfieldSprite(&_bridgeDisplaySprites[0], new StubBitmap(0, 0), Common::Rect(0, 66, 62, 108));
-	initStarfieldSprite(&_bridgeDisplaySprites[1], new StubBitmap(0, 0), Common::Rect(257, 68, 320, 109));
+	_vm->initStarfieldSprite(&_vm->_bridgeDisplaySprites[0], new StubBitmap(0, 0), Common::Rect(0, 66, 62, 108));
+	_vm->initStarfieldSprite(&_vm->_bridgeDisplaySprites[1], new StubBitmap(0, 0), Common::Rect(257, 68, 320, 109));
 
 	// A light runs along the bottom of the viewscreen
 	Bitmap *light = new Bitmap(7, 2);
 	memset(light->pixels, 0xda, 7 * 2);
-	_gfx->addSprite(&_bridgeLightSprite);
-	_bridgeLightSprite.setBitmap(light);
-	_bridgeLightSprite.setXYAndPriority(73, 107, 2);
-	_bridgeLightPosition = 0;
+	_vm->_gfx->addSprite(&_vm->_bridgeLightSprite);
+	_vm->_bridgeLightSprite.setBitmap(light);
+	_vm->_bridgeLightSprite.setXYAndPriority(73, 107, 2);
+	_vm->_bridgeLightPosition = 0;
 
-	initDemoShip(&_enterpriseR3, 0, 450, kDemoEnterpriseSystems);
-	_enterpriseR3.speedAcceleration = 4 << 16;
-	_enterpriseR3.weapons[2].mount = Point3(-20, -20, 50);
-	_enterpriseR3.weapons[3].mount = Point3(20, -20, 50);
+	initShip(&_vm->_enterpriseR3, 0, 450, kDemoEnterpriseSystems);
+	_vm->_enterpriseR3.speedAcceleration = 4 << 16;
+	_vm->_enterpriseR3.weapons[2].mount = Point3(-20, -20, 50);
+	_vm->_enterpriseR3.weapons[3].mount = Point3(20, -20, 50);
 
-	_enterpriseState.shields = false;
-	_enterpriseState.weapons = false;
-	_demoFireTime = 0;
-	_demoShieldMessageTime = 0;
-	_demoMessages.clear();
-	_demoMessageEnd = -1;
+	_vm->_enterpriseState.shields = false;
+	_vm->_enterpriseState.weapons = false;
+	_fireTime = 0;
+	_shieldMessageTime = 0;
+	_messages.clear();
+	_messageEnd = -1;
 }
 
-void StarTrekEngine::cleanupDemoBattle() {
-	if (_demoMessageEnd != -1)
-		_gfx->delSprite(&_demoMessageSprite);
-	_demoMessages.clear();
+void DosDemoBattle::cleanup() {
+	if (_messageEnd != -1)
+		_vm->_gfx->delSprite(&_messageSprite);
+	_messages.clear();
 
-	removeDrawnActorsFromScreen();
-	removeProjectiles();
+	_vm->removeDrawnActorsFromScreen();
+	_vm->removeProjectiles();
 	for (int i = 0; i < 2; i++) {
-		if (_enemyShips[i].field1e != 0)
-			delR3(&_enemyShips[i]);
-		_enemyShips[i] = R3();
+		if (_vm->_enemyShips[i].field1e != 0)
+			_vm->delR3(&_vm->_enemyShips[i]);
+		_vm->_enemyShips[i] = R3();
 	}
 	for (int i = 0; i < 2; i++)
-		_gfx->delSprite(&_bridgeDisplaySprites[i]);
-	_gfx->delSprite(&_bridgeLightSprite);
-	if (_gfx->hasSprite(&_scannerSprite))
-		_gfx->delSprite(&_scannerSprite);
-	_gfx->delSprite(&_starfieldSprite);
+		_vm->_gfx->delSprite(&_vm->_bridgeDisplaySprites[i]);
+	_vm->_gfx->delSprite(&_vm->_bridgeLightSprite);
+	if (_vm->_gfx->hasSprite(&_vm->_scannerSprite))
+		_vm->_gfx->delSprite(&_vm->_scannerSprite);
+	_vm->_gfx->delSprite(&_vm->_starfieldSprite);
 
-	_gfx->fadeoutScreen();
-	_gfx->toggleMouse(false);
-	_sound->stopDemoMusic();
-	clearDemoScreen();
+	_vm->_gfx->fadeoutScreen();
+	_vm->_gfx->toggleMouse(false);
+	_vm->_sound->stopDemoMusic();
+	_vm->clearDemoScreen();
 
-	delR3(&_enterpriseR3);
-	initDemoEnterprise();
+	_vm->delR3(&_vm->_enterpriseR3);
+	_vm->initDemoEnterprise();
 }
 
-void StarTrekEngine::initDemoShip(R3 *ship, int16 shape, int16 size, const int16 *strengths) {
+void DosDemoBattle::initShip(R3 *ship, int16 shape, int16 size, const int16 *strengths) {
 	ship->field1e = 2;
 	ship->field20 = shape;
 	ship->field22 = 200;
 	ship->field24 = size;
 	ship->pos = Point3();
-	ship->matrix = initMatrix();
+	ship->matrix = _vm->initMatrix();
 	ship->speed = Point3_Short();
 	for (int i = 0; i < 16; i++) {
 		ship->systems[i].present = 1;
@@ -171,85 +175,85 @@ void StarTrekEngine::initDemoShip(R3 *ship, int16 shape, int16 size, const int16
 	}
 }
 
-void StarTrekEngine::updateDemoBattle() {
-	_enterpriseR3.shieldsOn = _enterpriseState.shields;
-	_enterpriseR3.weaponsOn = _enterpriseState.weapons;
-	updateCamera();
+void DosDemoBattle::update() {
+	_vm->_enterpriseR3.shieldsOn = _vm->_enterpriseState.shields;
+	_vm->_enterpriseR3.weaponsOn = _vm->_enterpriseState.weapons;
+	_vm->updateCamera();
 
 	// The viewscreen fails with damage to the sensors
-	const ShipSystem &sensors = _enterpriseR3.systems[12];
-	if (msRand() % sensors.maxStrength < sensors.strength) {
-		updateStarfieldAndShips(false);
-		updateScanner();
+	const ShipSystem &sensors = _vm->_enterpriseR3.systems[12];
+	if (_vm->msRand() % sensors.maxStrength < sensors.strength) {
+		_vm->updateStarfieldAndShips(false);
+		_vm->updateScanner();
 	} else {
-		clearStarfieldPixels();
-		_starfieldSprite.bitmapChanged = true;
+		_vm->clearStarfieldPixels();
+		_vm->_starfieldSprite.bitmapChanged = true;
 	}
 
-	if ((_demoBattleFrame & 0xf) == 3)
-		drawDemoShipPanels();
-	if ((_demoBattleFrame & 3) == 0) {
-		_bridgeLightSprite.setXYAndPriority(73 + 8 * _bridgeLightPosition, 107, 2);
-		_bridgeLightPosition = (_bridgeLightPosition + 1) % 22;
+	if ((_frame & 0xf) == 3)
+		drawShipPanels();
+	if ((_frame & 3) == 0) {
+		_vm->_bridgeLightSprite.setXYAndPriority(73 + 8 * _vm->_bridgeLightPosition, 107, 2);
+		_vm->_bridgeLightPosition = (_vm->_bridgeLightPosition + 1) % 22;
 	}
-	_gfx->drawAllSprites();
-	updateDemoBridgeMessages();
+	_vm->_gfx->drawAllSprites();
+	updateBridgeMessages();
 
-	updateDemoShipEnergy(&_enterpriseR3);
-	moveDemoShip(&_enterpriseR3);
-	if ((_demoBattleFrame & 0x1f) == 7)
-		repairDemoShip(&_enterpriseR3);
+	updateShipEnergy(&_vm->_enterpriseR3);
+	moveShip(&_vm->_enterpriseR3);
+	if ((_frame & 0x1f) == 7)
+		repairShip(&_vm->_enterpriseR3);
 	for (int i = 0; i < 2; i++) {
-		if (_enemyShips[i].field1e != 0)
-			moveDemoKlingons();
+		if (_vm->_enemyShips[i].field1e != 0)
+			moveKlingons();
 	}
-	updateProjectiles();
-	updateActorAnimations();
+	_vm->updateProjectiles();
+	_vm->updateActorAnimations();
 
-	runDemoBattleScript();
-	_sound->restartDemoMusic();
-	if ((_demoBattleFrame & 1) == 0)
-		_gfx->cyclePalette(0xd0, 8, (_demoBattleFrame >> 1) & 7);
-	_gfx->incPaletteFadeLevel();
+	runScript();
+	_vm->_sound->restartDemoMusic();
+	if ((_frame & 1) == 0)
+		_vm->_gfx->cyclePalette(0xd0, 8, (_frame >> 1) & 7);
+	_vm->_gfx->incPaletteFadeLevel();
 
 	// The Enterprise turns towards the first Klingon ship
-	if (_enemyShips[0].field1e != 0) {
-		Point3 local = multPointMatrix(_enemyShips[0].pos - _enterpriseR3.pos, _enterpriseR3.matrix.invert());
+	if (_vm->_enemyShips[0].field1e != 0) {
+		Point3 local = multPointMatrix(_vm->_enemyShips[0].pos - _vm->_enterpriseR3.pos, _vm->_enterpriseR3.matrix.invert());
 		if (local.x * local.x + local.y * local.y + local.z * local.z > 99 * 99)
-			_enterpriseR3.turnRate.y = angleAtan2(local.x, local.z) >> 1;
+			_vm->_enterpriseR3.turnRate.y = _vm->angleAtan2(local.x, local.z) >> 1;
 	}
 
 	for (int i = 0; i < ARRAYSIZE(kDemoBattleKeys); i++) {
-		if (kDemoBattleKeys[i].frame == _demoBattleFrame)
-			handleDemoBattleKey(kDemoBattleKeys[i].key);
+		if (kDemoBattleKeys[i].frame == _frame)
+			handleKey(kDemoBattleKeys[i].key);
 	}
-	_frameIndex++;
+	_vm->_frameIndex++;
 }
 
-void StarTrekEngine::runDemoBattleScript() {
-	switch (_demoBattleFrame) {
+void DosDemoBattle::runScript() {
+	switch (_frame) {
 	case 10:
-		addDemoBridgeMessage("Uhura", "Captain, I'm picking up coded Klingon messages.", 200, 150);
+		addBridgeMessage("Uhura", "Captain, I'm picking up coded Klingon messages.", 200, 150);
 		break;
 	case 20:
-		addDemoBridgeMessage("Chekov", "Captain, there are Klingon wessels approaching.", 180, 120);
+		addBridgeMessage("Chekov", "Captain, there are Klingon wessels approaching.", 180, 120);
 		break;
 	case 120:
-		_sound->playDemoJingle("sta15v2");
-		waitDemoTicks(60);
-		loadActorAnim(7, "klghd", 160, 102, 1.0);
-		addDemoBridgeMessage("Klingon", "Prepare to die humans.", 160, 120);
+		_vm->_sound->playDemoJingle("sta15v2");
+		_vm->waitDemoTicks(60);
+		_vm->loadActorAnim(7, "klghd", 160, 102, 1.0);
+		addBridgeMessage("Klingon", "Prepare to die humans.", 160, 120);
 		break;
 	case 150:
 		for (int i = 0; i < 2; i++) {
-			R3 *ship = &_enemyShips[i];
+			R3 *ship = &_vm->_enemyShips[i];
 			*ship = R3();
-			initDemoShip(ship, 1, 381, kDemoKlingonSystems);
+			initShip(ship, 1, 381, kDemoKlingonSystems);
 			ship->pos = i == 0 ? Point3(1000, 0, 3750) : Point3(-1500, 100, 2875);
 			ship->shieldsOn = true;
 			ship->weaponsOn = true;
 			ship->weaponsActive = true;
-			addR3(ship);
+			_vm->addR3(ship);
 		}
 		break;
 	default:
@@ -258,11 +262,11 @@ void StarTrekEngine::runDemoBattleScript() {
 }
 
 // The original runs this once for each Klingon ship, even when the first one is destroyed
-void StarTrekEngine::moveDemoKlingons() {
+void DosDemoBattle::moveKlingons() {
 	const double kAngleStep = 0.026179166666666667;
-	int32 t = _demoBattleFrame - 150;
-	R3 *first = &_enemyShips[0];
-	R3 *second = &_enemyShips[1];
+	int32 t = _frame - 150;
+	R3 *first = &_vm->_enemyShips[0];
+	R3 *second = &_vm->_enemyShips[1];
 
 	// The first ship flies in a figure eight
 	if (t > 0 && t != 540) {
@@ -272,17 +276,17 @@ void StarTrekEngine::moveDemoKlingons() {
 		int16 heading;
 		if (t < 540) {
 			first->pos = Point3((int32)((s + 1.0) * 1000.0), 0, (int32)(c * 1750.0 + 2000.0));
-			heading = angleAtan2((int16)(c * -1000.0), (int16)(s * 1750.0));
+			heading = _vm->angleAtan2((int16)(c * -1000.0), (int16)(s * 1750.0));
 		} else {
 			first->pos = Point3((int32)((s - 1.0) * 1000.0), 0, (int32)(c * 1750.0 + 2000.0));
-			heading = angleAtan2((int16)(c * 1000.0), (int16)(s * -1750.0));
+			heading = _vm->angleAtan2((int16)(c * 1000.0), (int16)(s * -1750.0));
 		}
-		first->matrix = initMatrix();
-		rotateR3(first, 1, heading);
+		first->matrix = _vm->initMatrix();
+		_vm->rotateR3(first, 1, heading);
 	}
 
-	if (_demoBattleFrame == 205 || _demoBattleFrame == 445)
-		fireDemoKlingon(first);
+	if (_frame == 205 || _frame == 445)
+		fireKlingon(first);
 
 	// The second one waits, and then passes the Enterprise
 	if (t < 660) {
@@ -290,50 +294,50 @@ void StarTrekEngine::moveDemoKlingons() {
 	} else if (t > 660) {
 		int32 time = t - 660;
 		second->pos = Point3((int32)(time * 13.333 - 1500.0), 100, (int32)(time * -31.9444 + 2875.0));
-		second->matrix = initMatrix();
-		rotateR3(second, 1, angleAtan2(13, -31));
+		second->matrix = _vm->initMatrix();
+		_vm->rotateR3(second, 1, _vm->angleAtan2(13, -31));
 
-		if (_demoBattleFrame < 885 && t % 25 == 0)
-			fireDemoKlingon(second);
+		if (_frame < 885 && t % 25 == 0)
+			fireKlingon(second);
 	}
 }
 
-void StarTrekEngine::fireDemoKlingon(R3 *ship) {
-	Point3 direction = _enterpriseR3.pos - ship->pos;
+void DosDemoBattle::fireKlingon(R3 *ship) {
+	Point3 direction = _vm->_enterpriseR3.pos - ship->pos;
 	ship->weapons[2].mount = Point3(-80, -20, -50);
 	ship->weapons[3].mount = Point3(80, -20, -50);
-	fireWeapon(ship, 2, &direction);
-	fireWeapon(ship, 3, &direction);
-	_sound->playDemoJingle("sta9v1");
+	_vm->fireWeapon(ship, 2, &direction);
+	_vm->fireWeapon(ship, 3, &direction);
+	_vm->_sound->playDemoJingle("sta9v1");
 }
 
-void StarTrekEngine::fireDemoEnterprise() {
-	if (_demoFireTime >= _demoBattleFrame || !_enterpriseR3.weaponsActive)
+void DosDemoBattle::fireEnterprise() {
+	if (_fireTime >= _frame || !_vm->_enterpriseR3.weaponsActive)
 		return;
 
-	_demoFireTime = _demoBattleFrame + 20;
-	fireWeapon(&_enterpriseR3, 2, nullptr);
-	fireWeapon(&_enterpriseR3, 3, nullptr);
-	_sound->playDemoJingle("sta10v1");
+	_fireTime = _frame + 20;
+	_vm->fireWeapon(&_vm->_enterpriseR3, 2, nullptr);
+	_vm->fireWeapon(&_vm->_enterpriseR3, 3, nullptr);
+	_vm->_sound->playDemoJingle("sta10v1");
 }
 
 // The rates of turning are in steps per frame, which the arrow keys change
-void StarTrekEngine::moveDemoShip(R3 *ship) {
+void DosDemoBattle::moveShip(R3 *ship) {
 	const ShipSystem &bridge = ship->systems[7];
 	int32 maxRate = 11 * bridge.strength / bridge.maxStrength;
 	for (int axis = 0; axis < 3; axis++) {
 		ship->turnRate[axis] = CLIP<int32>(ship->turnRate[axis], -maxRate, maxRate);
 		if (ship->turnRate[axis] != 0)
-			rotateR3(ship, axis, ship->turnRate[axis]);
+			_vm->rotateR3(ship, axis, ship->turnRate[axis]);
 	}
 
-	updateShipSpeed(ship, ship->targetSpeed);
+	_vm->updateShipSpeed(ship, ship->targetSpeed);
 	ship->pos.x += ship->speed.x;
 	ship->pos.y += ship->speed.y;
 	ship->pos.z += ship->speed.z;
 }
 
-void StarTrekEngine::updateDemoShipEnergy(R3 *ship) {
+void DosDemoBattle::updateShipEnergy(R3 *ship) {
 	int16 energy = ship->systems[13].strength + ship->systems[14].strength + ship->systems[15].strength;
 
 	ship->shieldsActive = ship->shieldsOn && energy >= 10;
@@ -341,7 +345,7 @@ void StarTrekEngine::updateDemoShipEnergy(R3 *ship) {
 		energy -= 10;
 
 	// Weapons that were fired recently need more energy
-	int16 weaponsEnergy = _demoBattleFrame >= _demoFireTime ? 5 : 10;
+	int16 weaponsEnergy = _frame >= _fireTime ? 5 : 10;
 	ship->weaponsActive = ship->weaponsOn && energy >= weaponsEnergy;
 	if (ship->weaponsActive)
 		energy -= weaponsEnergy;
@@ -353,31 +357,31 @@ void StarTrekEngine::updateDemoShipEnergy(R3 *ship) {
 		ship->targetSpeed = ship->commandedSpeed;
 }
 
-void StarTrekEngine::repairDemoShip(R3 *ship) {
+void DosDemoBattle::repairShip(R3 *ship) {
 	for (int i = 0; i < 16; i++) {
 		ShipSystem &system = ship->systems[i];
 		system.strength = MIN<int16>(system.strength + 1, system.maxStrength);
 	}
 }
 
-void StarTrekEngine::handleDemoBattleEvent(const TrekEvent &event) {
+void DosDemoBattle::handleEvent(const TrekEvent &event) {
 	switch (event.type) {
 	case TREKEVENT_LBUTTONDOWN:
 	case TREKEVENT_RBUTTONDOWN: {
-		Sprite *sprite = _gfx->getSpriteAt(_gfx->getMousePos());
+		Sprite *sprite = _vm->_gfx->getSpriteAt(_vm->_gfx->getMousePos());
 		if (sprite == nullptr) {
-			fireDemoEnterprise();
+			fireEnterprise();
 			break;
 		}
 		for (int i = 0; i < 7; i++) {
-			if (sprite == &_actorList[i].sprite)
-				showDemoCrewMenu(i);
+			if (sprite == &_vm->_actorList[i].sprite)
+				showCrewMenu(i);
 		}
 		break;
 	}
 
 	case TREKEVENT_KEYDOWN:
-		handleDemoBattleKey(event.kbd.keycode);
+		handleKey(event.kbd.keycode);
 		break;
 
 	default:
@@ -385,8 +389,8 @@ void StarTrekEngine::handleDemoBattleEvent(const TrekEvent &event) {
 	}
 }
 
-void StarTrekEngine::handleDemoBattleKey(Common::KeyCode key) {
-	Point3 &rate = _enterpriseR3.turnRate;
+void DosDemoBattle::handleKey(Common::KeyCode key) {
+	Point3 &rate = _vm->_enterpriseR3.turnRate;
 
 	switch (key) {
 	case Common::KEYCODE_1:
@@ -398,10 +402,10 @@ void StarTrekEngine::handleDemoBattleKey(Common::KeyCode key) {
 	case Common::KEYCODE_7:
 	case Common::KEYCODE_8:
 	case Common::KEYCODE_9:
-		_enterpriseR3.commandedSpeed = ((_enterpriseR3.maxSpeed >> 16) * (key - Common::KEYCODE_1) / 9) << 16;
+		_vm->_enterpriseR3.commandedSpeed = ((_vm->_enterpriseR3.maxSpeed >> 16) * (key - Common::KEYCODE_1) / 9) << 16;
 		break;
 	case Common::KEYCODE_0:
-		_enterpriseR3.commandedSpeed = _enterpriseR3.maxSpeed;
+		_vm->_enterpriseR3.commandedSpeed = _vm->_enterpriseR3.maxSpeed;
 		break;
 	case Common::KEYCODE_UP:
 	case Common::KEYCODE_KP8:
@@ -429,37 +433,37 @@ void StarTrekEngine::handleDemoBattleKey(Common::KeyCode key) {
 		break;
 	case Common::KEYCODE_KP5:
 		rate = Point3();
-		_enterpriseR3.commandedSpeed = 0;
+		_vm->_enterpriseR3.commandedSpeed = 0;
 		break;
 	case Common::KEYCODE_s:
-		toggleDemoShields();
+		toggleShields();
 		break;
 	case Common::KEYCODE_w:
-		toggleDemoWeapons();
+		toggleWeapons();
 		break;
 	case Common::KEYCODE_SPACE:
 	case Common::KEYCODE_SLASH:
-		fireDemoEnterprise();
+		fireEnterprise();
 		break;
 	case Common::KEYCODE_ESCAPE:
-		quitGame();
+		_vm->quitGame();
 		break;
 	default:
 		break;
 	}
 }
 
-void StarTrekEngine::toggleDemoShields() {
-	_enterpriseState.shields = !_enterpriseState.shields;
-	addDemoBridgeMessage("Sulu", _enterpriseState.shields ? "Raising shields." : "Lowering shields.", 100, 120);
+void DosDemoBattle::toggleShields() {
+	_vm->_enterpriseState.shields = !_vm->_enterpriseState.shields;
+	addBridgeMessage("Sulu", _vm->_enterpriseState.shields ? "Raising shields." : "Lowering shields.", 100, 120);
 }
 
-void StarTrekEngine::toggleDemoWeapons() {
-	_enterpriseState.weapons = !_enterpriseState.weapons;
-	addDemoBridgeMessage("Chekov", _enterpriseState.weapons ? "Arming weapons." : "Disarming weapons.", 180, 120);
+void DosDemoBattle::toggleWeapons() {
+	_vm->_enterpriseState.weapons = !_vm->_enterpriseState.weapons;
+	addBridgeMessage("Chekov", _vm->_enterpriseState.weapons ? "Arming weapons." : "Disarming weapons.", 180, 120);
 }
 
-void StarTrekEngine::showDemoCrewMenu(int actor) {
+void DosDemoBattle::showCrewMenu(int actor) {
 	static const struct {
 		const char *menu;
 		int16 x;
@@ -477,47 +481,47 @@ void StarTrekEngine::showDemoCrewMenu(int actor) {
 	if (!kMenus[actor].menu)
 		return;
 
-	loadMenuButtons(kMenus[actor].menu, kMenus[actor].x, kMenus[actor].y);
-	int choice = handleMenuEvents(0, false);
-	unloadMenuButtons();
+	_vm->loadMenuButtons(kMenus[actor].menu, kMenus[actor].x, kMenus[actor].y);
+	int choice = _vm->handleMenuEvents(0, false);
+	_vm->unloadMenuButtons();
 
 	if (choice == 1 && actor == 3)
-		toggleDemoShields();
+		toggleShields();
 	else if (choice == 1 && actor == 4)
-		toggleDemoWeapons();
+		toggleWeapons();
 }
 
 // The messages of the bridge are shown one after the other, while the battle goes on
-void StarTrekEngine::addDemoBridgeMessage(const Common::String &speaker, const Common::String &text, int16 x, int16 y) {
-	DemoMessage message;
+void DosDemoBattle::addBridgeMessage(const Common::String &speaker, const Common::String &text, int16 x, int16 y) {
+	Message message;
 	message.speaker = speaker;
 	message.text = text;
 	message.x = x;
 	message.y = y;
-	_demoMessages.push_back(message);
+	_messages.push_back(message);
 }
 
-void StarTrekEngine::updateDemoBridgeMessages() {
-	if (_demoMessages.empty())
+void DosDemoBattle::updateBridgeMessages() {
+	if (_messages.empty())
 		return;
 
-	if (_demoMessageEnd == -1) {
-		const DemoMessage &message = _demoMessages.front();
-		_gfx->addSprite(&_demoMessageSprite);
-		drawDosDemoTextbox(&_demoMessageSprite, message.speaker, message.text.c_str(), message.x, message.y);
-		int lines = _demoMessageSprite.bitmap->height / 8 - 1;
-		_demoMessageEnd = _demoBattleFrame + lines * 12;
-	} else if (_demoBattleFrame >= _demoMessageEnd) {
-		_demoMessageSprite.dontDrawNextFrame();
-		_gfx->drawAllSprites();
-		_gfx->delSprite(&_demoMessageSprite);
-		_demoMessages.pop_front();
-		_demoMessageEnd = -1;
+	if (_messageEnd == -1) {
+		const Message &message = _messages.front();
+		_vm->_gfx->addSprite(&_messageSprite);
+		_vm->drawDosDemoTextbox(&_messageSprite, message.speaker, message.text.c_str(), message.x, message.y);
+		int lines = _messageSprite.bitmap->height / 8 - 1;
+		_messageEnd = _frame + lines * 12;
+	} else if (_frame >= _messageEnd) {
+		_messageSprite.dontDrawNextFrame();
+		_vm->_gfx->drawAllSprites();
+		_vm->_gfx->delSprite(&_messageSprite);
+		_messages.pop_front();
+		_messageEnd = -1;
 	}
 }
 
 // Damaged systems are shown in other colors on the pictures of the Enterprise
-void StarTrekEngine::drawDemoShipPanels() {
+void DosDemoBattle::drawShipPanels() {
 	static const struct {
 		int16 topX;
 		int16 topY;
@@ -542,38 +546,46 @@ void StarTrekEngine::drawDemoShipPanels() {
 	};
 
 	for (int i = 0; i < 10; i++) {
-		const ShipSystem &system = _enterpriseR3.systems[6 + i];
+		const ShipSystem &system = _vm->_enterpriseR3.systems[6 + i];
 		if (i != 0 && system.strength == system.maxStrength)
 			continue;
 		if (kSystemPictures[i].top)
-			drawDemoPanelBitmap(new Bitmap(_resource->loadBitmapFile(kSystemPictures[i].top)), kSystemPictures[i].topX, kSystemPictures[i].topY);
+			drawPanelBitmap(new Bitmap(_vm->_resource->loadBitmapFile(kSystemPictures[i].top)), kSystemPictures[i].topX, kSystemPictures[i].topY);
 		if (kSystemPictures[i].side)
-			drawDemoPanelBitmap(new Bitmap(_resource->loadBitmapFile(kSystemPictures[i].side)), kSystemPictures[i].sideX, kSystemPictures[i].sideY);
+			drawPanelBitmap(new Bitmap(_vm->_resource->loadBitmapFile(kSystemPictures[i].side)), kSystemPictures[i].sideX, kSystemPictures[i].sideY);
 	}
 
 	// The shields get darker when they are weakened
 	for (int i = 0; i < 6; i++) {
-		const ShipSystem &shield = _enterpriseR3.systems[i];
+		const ShipSystem &shield = _vm->_enterpriseR3.systems[i];
 		byte color = 0xb7;
-		if (_enterpriseR3.shieldsActive)
+		if (_vm->_enterpriseR3.shieldsActive)
 			color = 0xb0 + (shield.maxStrength - shield.strength) * 8 / (shield.maxStrength + 1);
 
-		Bitmap *bitmap = new Bitmap(_resource->loadBitmapFile(Common::String::format("shield%d", i)));
+		Bitmap *bitmap = new Bitmap(_vm->_resource->loadBitmapFile(Common::String::format("shield%d", i)));
 		for (int p = 0; p < bitmap->width * bitmap->height; p++) {
 			if (bitmap->pixels[p] != 0)
 				bitmap->pixels[p] = color;
 		}
-		drawDemoPanelBitmap(bitmap, kShieldPositions[i][0], kShieldPositions[i][1]);
+		drawPanelBitmap(bitmap, kShieldPositions[i][0], kShieldPositions[i][1]);
 	}
 
 	for (int i = 0; i < 2; i++)
-		_bridgeDisplaySprites[i].bitmapChanged = true;
+		_vm->_bridgeDisplaySprites[i].bitmapChanged = true;
 }
 
-void StarTrekEngine::drawDemoPanelBitmap(Bitmap *bitmap, int16 x, int16 y) {
+void DosDemoBattle::drawPanelBitmap(Bitmap *bitmap, int16 x, int16 y) {
 	Common::Rect rect(x - bitmap->xoffset, y - bitmap->yoffset, x - bitmap->xoffset + bitmap->width, y - bitmap->yoffset + bitmap->height);
-	_gfx->drawBitmapToBackground(rect, rect, bitmap);
+	_vm->_gfx->drawBitmapToBackground(rect, rect, bitmap);
 	delete bitmap;
+}
+
+// Scotty reports a lost shield of the Enterprise at most every 120 frames
+void DosDemoBattle::reportLostShield(const char *side) {
+	if (_vm->_frameIndex <= _shieldMessageTime)
+		return;
+	addBridgeMessage("Scotty", Common::String::format("We just lost our %s shield!.", side), 0, 150);
+	_shieldMessageTime = _vm->_frameIndex + 120;
 }
 
 } // End of namespace StarTrek

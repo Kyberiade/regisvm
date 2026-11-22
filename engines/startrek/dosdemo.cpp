@@ -21,6 +21,7 @@
 
 #include "common/file.h"
 
+#include "startrek/dosdemobattle.h"
 #include "startrek/graphics.h"
 #include "startrek/resource.h"
 #include "startrek/room.h"
@@ -48,6 +49,13 @@ void StarTrekEngine::runDosDemo() {
 		playDemoBattle();
 		playDemoEnding();
 	}
+}
+
+void StarTrekEngine::playDemoBattle() {
+	DosDemoBattle battle(this);
+	_demoBattle = &battle;
+	battle.play();
+	_demoBattle = nullptr;
 }
 
 void StarTrekEngine::initDemoEnterprise() {
