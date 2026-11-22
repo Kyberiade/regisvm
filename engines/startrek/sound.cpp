@@ -76,7 +76,7 @@ Sound::Sound(StarTrekEngine *vm) : _vm(vm) {
 		_amigaPlayer = new AmigaSoundPlayer(_vm);
 
 	_macPlayer = nullptr;
-	if (_vm->getPlatform() == Common::kPlatformMacintosh && !(_vm->getFeatures() & GF_DEMO)) {
+	if (_vm->getPlatform() == Common::kPlatformMacintosh) {
 		_macPlayer = new MacSoundPlayer(_vm);
 		_vm->_musicWorking = _macPlayer->init();
 	}
