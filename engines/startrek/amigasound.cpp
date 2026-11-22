@@ -213,13 +213,16 @@ void Sound::loadAmigaMusicFile(const Common::String &baseSoundName) {
 }
 
 void Sound::playAmigaTrack(int track, bool music) {
-	if (!_vm->_musicEnabled || track < 0 || track >= _amigaTrackCount)
+	if (track < 0 || track >= _amigaTrackCount)
 		return;
 
 	int value = _amigaTracks[track];
+	// Songs always play as music
+	if (!((value > 0 || music) ? _vm->_musicEnabled : _vm->_sfxEnabled))
+		return;
+
 	Audio::SoundHandle *handle = music ? &_amigaMusicHandle : nullptr;
 	if (value > 0) {
-		// Songs always play as music
 		_amigaMusicTrack = track;
 		playAmigaSong(value);
 	} else if (value < 0) {

@@ -132,13 +132,11 @@ void Sound::clearAllMidiSlots() {
 }
 
 void Sound::playMidiTrack(MidiTracks track) {
-	if (!_vm->_musicEnabled || !_vm->_musicWorking)
-		return;
-
 	// The DOS demo plays its music files directly, see playDemoMusic()
 	if (_vm->getFeatures() & GF_DEMO)
 		return;
 
+	// The tracks of the Amiga and Mac versions can be sound effects
 	if (_vm->getPlatform() == Common::kPlatformAmiga) {
 		playAmigaTrack(track, false);
 		return;
@@ -147,6 +145,9 @@ void Sound::playMidiTrack(MidiTracks track) {
 		playMacTrack(track, false);
 		return;
 	}
+
+	if (!_vm->_musicEnabled || !_vm->_musicWorking)
+		return;
 
 	assert(_loadedSoundData != nullptr);
 

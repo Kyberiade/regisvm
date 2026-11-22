@@ -152,9 +152,12 @@ void Sound::playMacTrack(int track, bool music) {
 
 	debugC(6, kDebugSound, "Playing Mac track %d (%d)", track, id);
 	if (id >= kMacFirstSoundEffect) {
-		_macDriver->startSoundEffect(id);
+		if (_vm->_sfxEnabled)
+			_macDriver->startSoundEffect(id);
 		return;
 	}
+	if (!_vm->_musicEnabled)
+		return;
 
 	// There is only one song at a time, also for the sound effects that are songs
 	int command = Audio::HalestormDriver::kSongPlayOnce;
