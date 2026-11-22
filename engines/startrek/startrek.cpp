@@ -30,6 +30,7 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/macresman.h"
+#include "common/translation.h"
 
 #include "graphics/paletteman.h"
 #include "graphics/pixelformat.h"
@@ -369,7 +370,8 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 			if (_pendingLoadSlot != -1) {
 				int slot = _pendingLoadSlot;
 				_pendingLoadSlot = -1;
-				loadGame(slot);
+				if (!loadGame(slot))
+					GUIErrorMessage(Common::U32String::format(_("Failed to load saved game from file:\n\n%s"), getSavegameFilename(slot).c_str()));
 			}
 			// The loop of a loaded game may play already
 			if (!_sound->_loopingAudioName.empty()) {
