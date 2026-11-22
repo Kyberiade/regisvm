@@ -127,7 +127,7 @@ void StarTrekEngine::spawnEnemyShip(const Common::String &name) {
 		*ship = R3();
 		ship->pos = _enterpriseR3.pos;
 		for (int j = 0; j < 3; j++)
-			ship->pos[j] += (int16)((0x40 - (msRand() & 0x7f)) << 4);
+			ship->pos[j] += (int16)((0x40 - (msRand() & 0x7f)) * 16);
 		loadShipDescriptor(ship, name);
 		ship->matrix = initMatrix();
 		ship->shieldsOn = true;
