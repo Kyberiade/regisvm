@@ -213,7 +213,7 @@ struct ComputerTopic {
 	Common::String topic;
 };
 
-#define NUM_BRIDGE_DISPLAYS 5
+const int NUM_BRIDGE_DISPLAYS = 5;
 
 enum SpaceMessage {
 	kSpaceMessageShieldsFalling = 1 << 0,

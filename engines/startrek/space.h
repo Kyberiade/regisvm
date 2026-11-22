@@ -356,13 +356,13 @@ inline uint16 msRandNext(uint32 &state) {
 	return (state >> 16) & 0x7fff;
 }
 
-#define PLANET_TEXTURE_SIZE 128
+const int PLANET_TEXTURE_SIZE = 128;
 
 // Maximum number of stars visible at once in the starfields
 #define NUM_STARS 16
 
-#define NUM_ENEMY_SHIPS 4
-#define NUM_PROJECTILES 32
+const int NUM_ENEMY_SHIPS = 4;
+const int NUM_PROJECTILES = 32;
 
 // Maximum number of R3 objects in space at once
 #define NUM_SPACE_OBJECTS 0x30
