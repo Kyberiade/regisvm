@@ -34,7 +34,7 @@ extern const RoomAction demo1ActionList[] = {
 	{ {ACTION_LIST_END, 0, 0, 0, 0}, nullptr }
 };
 
-enum demo1TextIds {
+enum Demo1TextIds {
 	TX_SPEAKER_MCCOY, TX_SPEAKER_SPOCK, TX_DEMO1_001
 };
 
