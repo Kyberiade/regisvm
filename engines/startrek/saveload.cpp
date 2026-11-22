@@ -232,7 +232,7 @@ bool StarTrekEngine::loadGame(int slot) {
 	}
 
 	SavegameMetadata meta;
-	if (!saveOrLoadMetadata(in, nullptr, &meta)) {
+	if (!saveOrLoadMetadata(in, nullptr, &meta, true)) {
 		delete in;
 		return false;
 	}
@@ -764,7 +764,7 @@ bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out
 
 	// Thumbnail
 	if (ser.isLoading()) {
-		if (!::Graphics::loadThumbnail(*in, meta->thumbnail))
+		if (!::Graphics::loadThumbnail(*in, meta->thumbnail, skipThumbnail))
 			meta->thumbnail = nullptr;
 	} else
 		::Graphics::saveThumbnail(*out);

@@ -1122,7 +1122,7 @@ private:
 };
 
 // Static function
-bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta);
+bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta, bool skipThumbnail = false);
 
 } // End of namespace StarTrek
 

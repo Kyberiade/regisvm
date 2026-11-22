@@ -222,7 +222,7 @@ SaveStateList StarTrekMetaEngine::listSaves(const char *target) const {
 			Common::InSaveFile *in = saveFileMan->openForLoading(*file);
 			if (in) {
 				StarTrek::SavegameMetadata meta;
-				StarTrek::saveOrLoadMetadata(in, nullptr, &meta);
+				StarTrek::saveOrLoadMetadata(in, nullptr, &meta, true);
 				delete in;
 
 				uint16 descriptionPos = 0;
