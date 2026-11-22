@@ -237,7 +237,7 @@ void AmigaSoundPlayer::playTrack(int track, bool music) {
 	} else if (value < 0) {
 		if (music)
 			_musicTrack = track;
-		playSoundEffect(-value, handle);
+		playSoundEffect(-value, handle, music ? Audio::Mixer::kMusicSoundType : Audio::Mixer::kSFXSoundType);
 	}
 }
 
@@ -283,7 +283,7 @@ void AmigaSoundPlayer::playSong(int song) {
 		mixer->playStream(Audio::Mixer::kMusicSoundType, &_musicHandle, stream);
 }
 
-void AmigaSoundPlayer::playSoundEffect(int effect, Audio::SoundHandle *handle) {
+void AmigaSoundPlayer::playSoundEffect(int effect, Audio::SoundHandle *handle, Audio::Mixer::SoundType type) {
 	// Some sound effects have random variations
 	if (effect == 3)
 		effect += _vm->getRandomWord() % 5;
@@ -319,7 +319,7 @@ void AmigaSoundPlayer::playSoundEffect(int effect, Audio::SoundHandle *handle) {
 	Audio::SeekableAudioStream *sample = Audio::makeRawStream(data, size, rate, 0, DisposeAfterUse::YES);
 	Audio::AudioStream *looping = Audio::makeLoopingAudioStream(sample, 0);
 	Audio::AudioStream *stream = Audio::makeLimitingAudioStream(looping, Audio::Timestamp(kAmigaSoundEffects[effect].duration * 20));
-	mixer->playStream(Audio::Mixer::kSFXSoundType, handle, stream);
+	mixer->playStream(type, handle, stream);
 }
 
 void AmigaSoundPlayer::stop(bool music, bool soundEffects) {

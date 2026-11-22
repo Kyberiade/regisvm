@@ -47,7 +47,7 @@ public:
 
 private:
 	void playSong(int song);
-	void playSoundEffect(int effect, Audio::SoundHandle *handle);
+	void playSoundEffect(int effect, Audio::SoundHandle *handle, Audio::Mixer::SoundType type);
 
 	StarTrekEngine *_vm;
 	const int8 *_tracks;
