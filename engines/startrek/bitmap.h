@@ -22,6 +22,7 @@
 #ifndef STARTREK_BITMAP_H
 #define STARTREK_BITMAP_H
 
+#include "common/array.h"
 #include "common/ptr.h"
 #include "common/str-array.h"
 #include "common/stream.h"
@@ -39,7 +40,7 @@ struct Bitmap {
 	Bitmap(Common::MemoryReadStreamEndian *stream, bool closeStream = true);
 	Bitmap(const Bitmap &bitmap);
 	Bitmap(int w, int h);
-	~Bitmap();
+	virtual ~Bitmap();
 
 protected:
 	int32 pixelsArraySize;
@@ -58,6 +59,11 @@ struct TextBitmap : Bitmap {
 
 	// The Amiga version draws the header (line 0) and the text lines with a proportional font
 	Common::StringArray amigaLines;
+
+	// The drawn Amiga textbox, until its lines or its color change
+	Common::Array<byte> amigaPixels;
+	Common::StringArray amigaDrawnLines;
+	byte amigaDrawnColor = 0;
 };
 
 

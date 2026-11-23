@@ -776,20 +776,9 @@ void Graphics::popSprites() {
 
 // Like the Amiga version, which draws textboxes with the graphics.library
 void Graphics::drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::Rect &rect) {
-	// Baseline of the StarTrekTiny font
-	const int kBaseline = 6;
-
-	const TextBitmap *bitmap = (const TextBitmap *)sprite.bitmap;
+	TextBitmap *bitmap = (TextBitmap *)sprite.bitmap;
 	int width = bitmap->width;
 	int height = bitmap->height;
-
-	::Graphics::Surface box;
-	box.create(width, height, ::Graphics::PixelFormat::createFormatCLUT8());
-	box.fillRect(Common::Rect(width, height), 0);
-	box.hLine(0, 0, width - 1, 0x78);
-	box.vLine(width - 1, 0, height - 1, 0x78);
-	box.hLine(0, height - 1, width - 1, 0x78);
-	box.vLine(0, 1, height - 1, 0x78);
 
 	byte color;
 	if (sprite.textColor == 0xc0)
@@ -800,6 +789,35 @@ void Graphics::drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::
 		color = 0x2c;
 	else
 		color = 0xb0;
+
+	// The textbox is drawn again only when it changes
+	if (bitmap->amigaPixels.size() != (uint)(width * height) || bitmap->amigaDrawnLines != bitmap->amigaLines
+	        || bitmap->amigaDrawnColor != color) {
+		drawAmigaTextboxPixels(bitmap, color);
+		bitmap->amigaDrawnLines = bitmap->amigaLines;
+		bitmap->amigaDrawnColor = color;
+	}
+
+	int left = rect.left - sprite.drawX;
+	int top = rect.top - sprite.drawY;
+	for (int row = 0; row < rect.height(); row++)
+		memcpy(dest + row * SCREEN_WIDTH, &bitmap->amigaPixels[(top + row) * width + left], rect.width());
+}
+
+void Graphics::drawAmigaTextboxPixels(TextBitmap *bitmap, byte color) {
+	// Baseline of the StarTrekTiny font
+	const int kBaseline = 6;
+
+	int width = bitmap->width;
+	int height = bitmap->height;
+
+	::Graphics::Surface box;
+	box.create(width, height, ::Graphics::PixelFormat::createFormatCLUT8());
+	box.fillRect(Common::Rect(width, height), 0);
+	box.hLine(0, 0, width - 1, 0x78);
+	box.vLine(width - 1, 0, height - 1, 0x78);
+	box.hLine(0, height - 1, width - 1, 0x78);
+	box.vLine(0, 1, height - 1, 0x78);
 
 	int y = 8;
 	uint line = 0;
@@ -814,10 +832,9 @@ void Graphics::drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::
 		y += 8;
 	}
 
-	int left = rect.left - sprite.drawX;
-	int top = rect.top - sprite.drawY;
-	for (int row = 0; row < rect.height(); row++)
-		memcpy(dest + row * SCREEN_WIDTH, box.getBasePtr(left, top + row), rect.width());
+	bitmap->amigaPixels.resize(width * height);
+	for (int row = 0; row < height; row++)
+		memcpy(&bitmap->amigaPixels[row * width], box.getBasePtr(0, row), width);
 
 	box.free();
 }

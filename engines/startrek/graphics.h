@@ -159,6 +159,7 @@ public:
 	void drawBackgroundImage(const char *filename);
 
 	void drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::Rect &rect);
+	void drawAmigaTextboxPixels(TextBitmap *bitmap, byte color);
 
 public:
 	Font *_font;
