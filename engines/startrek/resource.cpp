@@ -268,15 +268,21 @@ Common::MemoryReadStreamEndian *Resource::loadFile(Common::String filename, int 
 
 	if (index.fileCount != 1)
 		index.indexOffset = getSequentialFileOffset(index.indexOffset, fileIndex);
-	dataFile->seek(index.indexOffset);
+	if ((int64)index.indexOffset >= dataFile->size() || !dataFile->seek(index.indexOffset))
+		error("Resource %s is outside of the data file", filename.c_str());
 
 	Common::SeekableReadStream *stream;
 	if (_isDemo && _platform == Common::kPlatformDOS) {
 		stream = dataFile->readStream(index.uncompressedSize);
+		if (stream->size() != index.uncompressedSize)
+			error("Incomplete resource %s", filename.c_str());
 	} else {
-		uint16 uncompressedSize = bigEndian ? dataFile->readUint16BE() : dataFile->readUint16LE();
-		uint16   compressedSize = bigEndian ? dataFile->readUint16BE() : dataFile->readUint16LE();
-		stream = decodeLZSS(dataFile->readStream(compressedSize), uncompressedSize);
+		uint16 uncompressedSize = readUint16(dataFile, bigEndian);
+		uint16 compressedSize = readUint16(dataFile, bigEndian);
+		Common::SeekableReadStream *compressed = dataFile->readStream(compressedSize);
+		if (compressed->size() != compressedSize)
+			error("Incomplete resource %s", filename.c_str());
+		stream = decodeLZSS(compressed, uncompressedSize);
 	}
 
 	delete dataFile;
