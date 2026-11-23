@@ -241,8 +241,15 @@ void StarTrekEngine::pauseUntilKeyPress() {
 		Common::Event event;
 		while (_eventMan->pollEvent(event)) {
 			if (event.type == Common::EVENT_KEYDOWN
-			        && (event.kbd.keycode < Common::KEYCODE_NUMLOCK || event.kbd.keycode > Common::KEYCODE_COMPOSE))
+			        && (event.kbd.keycode < Common::KEYCODE_NUMLOCK || event.kbd.keycode > Common::KEYCODE_COMPOSE)) {
+				// The keys released during the pause are not held anymore
+				_heldKey = Common::KEYCODE_INVALID;
+				if (_heldDirectionKey != Common::KEYCODE_INVALID) {
+					_heldDirectionKey = Common::KEYCODE_INVALID;
+					_directionKeyChanged = true;
+				}
 				return;
+			}
 		}
 		_system->updateScreen();
 		_system->delayMillis(10);
