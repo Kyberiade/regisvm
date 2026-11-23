@@ -104,6 +104,14 @@ static uint32 readUint24(Common::SeekableReadStream *stream, bool bigEndian) {
 	return bigEndian ? READ_BE_UINT24(bytes) : READ_LE_UINT24(bytes);
 }
 
+// The lengths in the runs have 16 bits
+static uint16 readUint16(Common::SeekableReadStream *stream, bool bigEndian) {
+	byte bytes[2];
+	if (stream->read(bytes, sizeof(bytes)) != sizeof(bytes))
+		error("Incomplete resource length");
+	return bigEndian ? READ_BE_UINT16(bytes) : READ_LE_UINT16(bytes);
+}
+
 ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
 	ResourceIndex index;
 
@@ -195,13 +203,14 @@ uint32 Resource::getSequentialFileOffset(uint32 offset, int fileIndex) {
 	if (!dataRunFile)
 		error("Could not open sequential file");
 
-	dataRunFile->seek(offset);
+	if (!dataRunFile->seek(offset))
+		error("Could not seek to the run at %d", offset);
 
 	bool bigEndian = _platform == Common::kPlatformAmiga;
 	offset = readUint24(dataRunFile, bigEndian);
 
 	for (uint16 i = 0; i < fileIndex; i++)
-		offset += bigEndian ? dataRunFile->readUint16BE() : dataRunFile->readUint16LE();
+		offset += readUint16(dataRunFile, bigEndian);
 
 	delete dataRunFile;
 
