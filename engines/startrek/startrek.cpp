@@ -288,6 +288,10 @@ Common::Error StarTrekEngine::run() {
 
 // Starts a new game without the intro. The original loads SAVEGAME.NEW for this.
 void StarTrekEngine::restartGame() {
+	// The new game starts without the sound loop of the last room
+	_sound->stopAllVocSounds();
+	_sound->_loopingAudioName.clear();
+
 	for (int i = 0; i < NUM_ENEMY_SHIPS; i++) {
 		if (_enemyShips[i].field1e != 0)
 			delR3(&_enemyShips[i]);
@@ -374,11 +378,6 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 				_pendingLoadSlot = -1;
 				if (!loadGame(slot))
 					GUIErrorMessage(Common::U32String::format(_("Failed to load saved game from file:\n\n%s"), getSavegameFilename(slot).c_str()));
-			}
-			// The loop of a loaded game may play already
-			if (!_sound->_loopingAudioName.empty()) {
-				_sound->stopAllVocSounds();
-				_sound->playVoc(_sound->_loopingAudioName);
 			}
 			_resetGameMode = false;
 		}
