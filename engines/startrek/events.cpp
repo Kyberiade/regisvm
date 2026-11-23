@@ -72,11 +72,14 @@ void StarTrekEngine::pollEvents(bool queueEvents) {
 
 			// These keys work everywhere
 			if (event.kbd.flags & Common::KBD_CTRL) {
+				// A held key toggles only once
 				if (event.kbd.keycode == Common::KEYCODE_s) {
-					_sound->toggleSfx();
+					if (!event.kbdRepeat)
+						_sound->toggleSfx();
 					break;
 				} else if (event.kbd.keycode == Common::KEYCODE_m) {
-					_sound->toggleMusic();
+					if (!event.kbdRepeat)
+						_sound->toggleMusic();
 					break;
 				} else if (event.kbd.keycode == Common::KEYCODE_p) {
 					pauseUntilKeyPress();
