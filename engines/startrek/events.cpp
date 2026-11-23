@@ -322,6 +322,7 @@ bool StarTrekEngine::getNextEvent(TrekEvent *e, bool poll) {
 		if (millis >= nextFrame) {
 			_clockTicks++;
 			_frameStartMillis = millis;
+			_sound->updateSpeech();
 
 			TrekEvent tickEvent;
 			tickEvent.type = TREKEVENT_TICK;

@@ -601,7 +601,15 @@ MidiTracks Sound::getPlayingMidiTrack() {
 }
 
 bool Sound::isPlayingSpeech() const {
-	return _playingSpeech;
+	return _playingSpeech && _vm->_system->getMixer()->isSoundHandleActive(_speechHandle);
+}
+
+// The ticks report the end of the speech once, for all platforms
+void Sound::updateSpeech() {
+	if (_playingSpeech && !isPlayingSpeech()) {
+		stopPlayingSpeech();
+		_vm->_finishedPlayingSpeech = true;
+	}
 }
 
 
@@ -672,12 +680,6 @@ void Sound::midiDriverCallback(void *data) {
 	Common::StackLock lock(s->_midiMutex);
 	for (int i = 0; i < NUM_MIDI_SLOTS; i++)
 		s->_midiSlots[i].midiParser->onTimer();
-
-	// TODO: put this somewhere other than the midi callback...
-	if (s->_playingSpeech && !s->_vm->_system->getMixer()->isSoundHandleActive(s->_speechHandle)) {
-		s->stopPlayingSpeech();
-		s->_vm->_finishedPlayingSpeech = true;
-	}
 }
 
 } // End of namespace StarTrek

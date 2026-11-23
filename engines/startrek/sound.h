@@ -98,6 +98,7 @@ public:
 	void checkLoopMusic();
 	MidiTracks getPlayingMidiTrack();
 	bool isPlayingSpeech() const;
+	void updateSpeech();
 
 private:
 	StarTrekEngine *_vm;
