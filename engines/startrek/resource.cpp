@@ -279,7 +279,10 @@ Common::MemoryReadStreamEndian *Resource::loadFile(Common::String filename, int 
 
 	if (index.fileCount != 1)
 		index.indexOffset = getSequentialFileOffset(index.indexOffset, fileIndex);
-	if ((int64)index.indexOffset >= dataFile->size() || !dataFile->seek(index.indexOffset))
+	// Only an empty demo record may start at the end of the file
+	bool emptyDemoRecord = _isDemo && _platform == Common::kPlatformDOS && index.uncompressedSize == 0;
+	int64 offset = index.indexOffset;
+	if (offset > dataFile->size() || (offset == dataFile->size() && !emptyDemoRecord) || !dataFile->seek(offset))
 		error("Resource %s is outside of the data file", filename.c_str());
 
 	Common::SeekableReadStream *stream;
