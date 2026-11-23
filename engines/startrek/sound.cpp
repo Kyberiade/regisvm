@@ -79,6 +79,10 @@ Sound::Sound(StarTrekEngine *vm) : _vm(vm) {
 	if (_vm->getPlatform() == Common::kPlatformMacintosh) {
 		_macPlayer = new MacSoundPlayer(_vm);
 		_vm->_musicWorking = _macPlayer->init();
+		if (!_vm->_musicWorking) {
+			delete _macPlayer;
+			_macPlayer = nullptr;
+		}
 	}
 
 	_soundHandle = new Audio::SoundHandle();
