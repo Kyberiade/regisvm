@@ -137,6 +137,7 @@ void Sound::pauseMidi(bool pause) {
 	if (!_midiDriver)
 		return;
 
+	Common::StackLock lock(_midiMutex);
 	for (int i = 0; i < NUM_MIDI_SLOTS; i++) {
 		if (pause)
 			_midiSlots[i].midiParser->pausePlaying();
@@ -668,6 +669,7 @@ void Sound::clearMidiSlot(int slot) {
 // Static callback method
 void Sound::midiDriverCallback(void *data) {
 	Sound *s = (Sound *)data;
+	Common::StackLock lock(s->_midiMutex);
 	for (int i = 0; i < NUM_MIDI_SLOTS; i++)
 		s->_midiSlots[i].midiParser->onTimer();
 

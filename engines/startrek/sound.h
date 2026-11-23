@@ -29,6 +29,8 @@
 #include "audio/mididrv.h"
 #include "audio/mixer.h"
 
+#include "common/mutex.h"
+
 namespace Common {
 class MacResManager;
 }
@@ -117,6 +119,7 @@ private:
 	// MIDI-Related Variables
 	MidiDriver *_midiDriver;
 	MidiPlaybackSlot _midiSlots[NUM_MIDI_SLOTS]; // 0 is for music; 1-7 are for sfx
+	Common::Mutex _midiMutex; // For the timer of the MIDI driver
 	Common::List<MidiPlaybackSlot *> _midiSlotList; // Sorts midi slots by most recently used
 
 	byte *_loadedSoundData;
