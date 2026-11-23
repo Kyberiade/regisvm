@@ -106,6 +106,7 @@ private:
 
 	void loadPCMusicFile(const Common::String &baseSoundName);
 	void clearMidiSlot(int slot);
+	bool isMidiSlotPlaying(int slot);
 
 	/**
 	 * Opens a sound of the CD versions, given as "<dir>\\<name>": a VOC file in "voc",

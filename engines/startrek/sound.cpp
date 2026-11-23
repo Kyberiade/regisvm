@@ -232,7 +232,7 @@ bool Sound::isMidiPlaying() {
 		return _macPlayer && _macPlayer->isMusicPlaying();
 
 	for (int i = 0; i < NUM_MIDI_SLOTS; i++) {
-		if (_midiSlots[i].midiParser->isPlaying())
+		if (isMidiSlotPlaying(i))
 			return true;
 	}
 
@@ -430,7 +430,7 @@ void Sound::playDemoJingle(const Common::String &name) {
 }
 
 void Sound::restartDemoMusic() {
-	if (_midiDriver && !_midiSlots[0].midiParser->isPlaying() && !_demoBackgroundMusic.empty())
+	if (_midiDriver && !isMidiSlotPlaying(0) && !_demoBackgroundMusic.empty())
 		playDemoMidiFile(0, _demoBackgroundMusic);
 }
 
@@ -439,7 +439,7 @@ void Sound::startDemoMusicSetup() {
 }
 
 bool Sound::isDemoMusicSetupPlaying() {
-	return _midiDriver && _midiSlots[1].midiParser->isPlaying();
+	return _midiDriver && isMidiSlotPlaying(1);
 }
 
 void Sound::stopDemoMusic() {
@@ -590,7 +590,7 @@ void Sound::checkLoopMusic() {
 	else if (_vm->getPlatform() == Common::kPlatformMacintosh)
 		playing = _macPlayer && _macPlayer->isMusicPlaying();
 	else
-		playing = _midiSlots[0].midiParser->isPlaying();
+		playing = isMidiSlotPlaying(0);
 	if (!playing)
 		playMidiTrackInSlot(0, _loopingMidiTrack);
 }
@@ -600,7 +600,7 @@ MidiTracks Sound::getPlayingMidiTrack() {
 		return _amigaPlayer->isMusicPlaying() ? (MidiTracks)_amigaPlayer->getMusicTrack() : MIDITRACK_NONE;
 	if (_vm->getPlatform() == Common::kPlatformMacintosh)
 		return (_macPlayer && _macPlayer->isMusicPlaying()) ? (MidiTracks)_macPlayer->getMusicTrack() : MIDITRACK_NONE;
-	if (!_vm->_musicWorking || !_midiSlots[0].midiParser->isPlaying())
+	if (!_vm->_musicWorking || !isMidiSlotPlaying(0))
 		return MIDITRACK_NONE;
 	return (MidiTracks)_midiSlots[0].track;
 }
@@ -682,6 +682,12 @@ void Sound::clearMidiSlot(int slot) {
 	_midiSlots[slot].midiParser->stopPlaying();
 	_midiSlots[slot].midiParser->unloadMusic();
 	_midiSlots[slot].track = -1;
+}
+
+// The timer ends the tracks
+bool Sound::isMidiSlotPlaying(int slot) {
+	Common::StackLock lock(_midiMutex);
+	return _midiSlots[slot].midiParser->isPlaying();
 }
 
 // Static callback method
