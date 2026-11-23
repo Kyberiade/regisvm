@@ -33,7 +33,7 @@
 
 namespace StarTrek {
 
-enum kDebugLevels {
+enum StarTrekDebugChannels {
 	kDebugSound = 1,
 	kDebugGraphics,
 	kDebugSavegame,
