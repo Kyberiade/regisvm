@@ -589,6 +589,10 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 		};
 		_missionState = kMissionNone;
 		_missionTicks = 1000;
+		Common::fill(_missionVars, _missionVars + ARRAYSIZE(_missionVars), 0);
+		_missionScore = 0;
+		_missionMaxScore = 0;
+		_missionEndFlag = 0;
 		for (int i = 0; i < ARRAYSIZE(kMissionStates); i++) {
 			if (_missionToLoad.equalsIgnoreCase(kMissionStates[i].mission))
 				_missionState = kMissionStates[i].state;
