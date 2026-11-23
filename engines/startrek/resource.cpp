@@ -22,6 +22,7 @@
 
 #include "common/file.h"
 #include "common/macresman.h"
+#include "common/ptr.h"
 
 #include "engines/util.h"
 #include "video/qt_decoder.h"
@@ -110,6 +111,16 @@ static uint16 readUint16(Common::SeekableReadStream *stream, bool bigEndian) {
 	if (stream->read(bytes, sizeof(bytes)) != sizeof(bytes))
 		error("Incomplete resource length");
 	return bigEndian ? READ_BE_UINT16(bytes) : READ_LE_UINT16(bytes);
+}
+
+// Unlike readStream(), this also accepts empty records
+static Common::SeekableReadStream *readPayload(Common::SeekableReadStream *stream, uint32 size, const Common::String &filename) {
+	if (size > (uint64)(stream->size() - stream->pos()))
+		error("Incomplete resource %s", filename.c_str());
+	byte *data = (byte *)malloc(MAX<uint32>(size, 1));
+	if (stream->read(data, size) != size)
+		error("Incomplete resource %s", filename.c_str());
+	return new Common::MemoryReadStream(data, size, DisposeAfterUse::YES);
 }
 
 ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
@@ -273,16 +284,12 @@ Common::MemoryReadStreamEndian *Resource::loadFile(Common::String filename, int 
 
 	Common::SeekableReadStream *stream;
 	if (_isDemo && _platform == Common::kPlatformDOS) {
-		stream = dataFile->readStream(index.uncompressedSize);
-		if (stream->size() != index.uncompressedSize)
-			error("Incomplete resource %s", filename.c_str());
+		stream = readPayload(dataFile, index.uncompressedSize, filename);
 	} else {
 		uint16 uncompressedSize = readUint16(dataFile, bigEndian);
 		uint16 compressedSize = readUint16(dataFile, bigEndian);
-		Common::SeekableReadStream *compressed = dataFile->readStream(compressedSize);
-		if (compressed->size() != compressedSize)
-			error("Incomplete resource %s", filename.c_str());
-		stream = decodeLZSS(compressed, uncompressedSize);
+		Common::ScopedPtr<Common::SeekableReadStream> compressed(readPayload(dataFile, compressedSize, filename));
+		stream = decodeLZSS(compressed.get(), uncompressedSize);
 	}
 
 	delete dataFile;
