@@ -811,8 +811,10 @@ void Graphics::drawAmigaTextboxPixels(TextBitmap *bitmap, byte color) {
 	int width = bitmap->width;
 	int height = bitmap->height;
 
+	// The surface draws into the pixels of the bitmap, which keeps them
+	bitmap->amigaPixels.resize(width * height);
 	::Graphics::Surface box;
-	box.create(width, height, ::Graphics::PixelFormat::createFormatCLUT8());
+	box.init(width, height, width, bitmap->amigaPixels.data(), ::Graphics::PixelFormat::createFormatCLUT8());
 	box.fillRect(Common::Rect(width, height), 0);
 	box.hLine(0, 0, width - 1, 0x78);
 	box.vLine(width - 1, 0, height - 1, 0x78);
@@ -831,12 +833,6 @@ void Graphics::drawAmigaTextboxPixels(TextBitmap *bitmap, byte color) {
 		_amigaFont->drawString(&box, bitmap->amigaLines[line], 2, y - kBaseline, width - 2, color);
 		y += 8;
 	}
-
-	bitmap->amigaPixels.resize(width * height);
-	for (int row = 0; row < height; row++)
-		memcpy(&bitmap->amigaPixels[row * width], box.getBasePtr(0, row), width);
-
-	box.free();
 }
 
 byte *Graphics::getFontGfx(char c) {
