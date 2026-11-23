@@ -82,6 +82,7 @@ public:
 	void toggleMusic();
 	void toggleSfx();
 	void syncSoundSettings();
+	void pauseMidi(bool pause);
 
 	// The DOS demo plays MIDI files, for the MT-32 only. The setup of the
 	// MT-32 plays along the music.

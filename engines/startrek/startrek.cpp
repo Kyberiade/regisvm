@@ -111,6 +111,7 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_mapFile = nullptr;
 	_iwFile = nullptr;
 	_demoEvents = nullptr;
+	_demoPlaybackStartMillis = 0;
 
 	_showSubtitles = true;
 	_shipDitheringEnabled = true;
@@ -578,6 +579,12 @@ void StarTrekEngine::playMovieMac(Common::String filename) {
 
 	// Swap back to 8bpp mode
 	initGraphics(SCREEN_WIDTH, SCREEN_HEIGHT);
+}
+
+void StarTrekEngine::pauseEngineIntern(bool pause) {
+	Engine::pauseEngineIntern(pause);
+	if (_sound)
+		_sound->pauseMidi(pause);
 }
 
 void StarTrekEngine::syncSoundSettings() {

@@ -259,6 +259,7 @@ public:
 
 	Common::Error run() override;
 	void syncSoundSettings() override;
+	void pauseEngineIntern(bool pause) override;
 	Common::Error runGameMode(int mode, bool resume);
 
 	// Markers of ScummVM for the objects of an away mission

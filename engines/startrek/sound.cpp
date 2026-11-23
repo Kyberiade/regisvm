@@ -132,6 +132,19 @@ void Sound::syncSoundSettings() {
 		_macPlayer->syncSoundSettings();
 }
 
+// The mixer pauses the other sounds
+void Sound::pauseMidi(bool pause) {
+	if (!_midiDriver)
+		return;
+
+	for (int i = 0; i < NUM_MIDI_SLOTS; i++) {
+		if (pause)
+			_midiSlots[i].midiParser->pausePlaying();
+		else
+			_midiSlots[i].midiParser->resumePlaying();
+	}
+}
+
 void Sound::clearAllMidiSlots() {
 	for (int i = 0; i < NUM_MIDI_SLOTS; i++) {
 		clearMidiSlot(i);

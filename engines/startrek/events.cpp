@@ -238,6 +238,9 @@ void StarTrekEngine::updateKeyboardMouse(bool queueEvents) {
 
 // Like in DOS, Ctrl+P waits for a key press
 void StarTrekEngine::pauseUntilKeyPress() {
+	PauseToken pauseToken = pauseEngine();
+	uint32 pauseStart = _system->getMillis();
+
 	while (!shouldQuit()) {
 		Common::Event event;
 		while (_eventMan->pollEvent(event)) {
@@ -249,6 +252,11 @@ void StarTrekEngine::pauseUntilKeyPress() {
 					_heldDirectionKey = Common::KEYCODE_INVALID;
 					_directionKeyChanged = true;
 				}
+
+				// The ticks and the recorded input of the DOS demo continue after the pause
+				uint32 pauseTime = _system->getMillis() - pauseStart;
+				_frameStartMillis += pauseTime;
+				_demoPlaybackStartMillis += pauseTime;
 				return;
 			}
 		}
