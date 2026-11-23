@@ -172,6 +172,7 @@ void Sound::playMidiTrack(MidiTracks track) {
 		return;
 
 	assert(_loadedSoundData != nullptr);
+	Common::StackLock lock(_midiMutex);
 
 	// Check if a midi slot for this track exists already
 	for (int i = 1; i < NUM_MIDI_SLOTS; i++) {
@@ -211,6 +212,7 @@ void Sound::playMidiTrackInSlot(int slot, MidiTracks track) {
 	assert(_loadedSoundData != nullptr);
 	debugC(6, kDebugSound, "Playing MIDI track %d (slot %d)", track, slot);
 
+	Common::StackLock lock(_midiMutex);
 	clearMidiSlot(slot);
 
 	if (track != -1) {
@@ -401,14 +403,17 @@ void Sound::playDemoMidiFile(int slot, const Common::String &name) {
 	if (!_vm->_musicWorking || !_vm->_musicEnabled || !isMT32())
 		return;
 
-	clearMidiSlot(slot);
-	delete[] _demoMusicData[slot];
 	Common::MemoryReadStreamEndian *stream = _vm->_resource->loadFile(name + ".mus");
 	uint32 size = stream->size();
-	_demoMusicData[slot] = new byte[size];
-	stream->read(_demoMusicData[slot], size);
+	byte *data = new byte[size];
+	stream->read(data, size);
 	delete stream;
 
+	// The timer must not parse the old data while it is replaced
+	Common::StackLock lock(_midiMutex);
+	clearMidiSlot(slot);
+	delete[] _demoMusicData[slot];
+	_demoMusicData[slot] = data;
 	_midiSlots[slot].track = 0;
 	_midiSlots[slot].midiParser->loadMusic(_demoMusicData[slot], size);
 	_midiSlots[slot].midiParser->setTrack(0);
@@ -643,11 +648,15 @@ void Sound::loadPCMusicFile(const Common::String &baseSoundName) {
 	debugC(5, kDebugSound, "Loading midi \'%s\'\n", soundName.c_str());
 	Common::MemoryReadStreamEndian *soundStream = _vm->_resource->loadFile(soundName.c_str());
 
-	if (_loadedSoundData != nullptr)
-		delete[] _loadedSoundData;
-	_loadedSoundDataSize = soundStream->size();
-	_loadedSoundData = new byte[_loadedSoundDataSize];
-	soundStream->read(_loadedSoundData, _loadedSoundDataSize);
+	uint32 size = soundStream->size();
+	byte *data = new byte[size];
+	soundStream->read(data, size);
+
+	// The timer must not parse the old data while it is replaced
+	Common::StackLock lock(_midiMutex);
+	delete[] _loadedSoundData;
+	_loadedSoundData = data;
+	_loadedSoundDataSize = size;
 
 	// FIXME: should music start playing when this is called?
 	//_midiSlots[0].midiParser->loadMusic(_loadedSoundData, soundStream->size());
@@ -669,6 +678,7 @@ void Sound::clearMidiSlot(int slot) {
 		return;
 	}
 
+	Common::StackLock lock(_midiMutex);
 	_midiSlots[slot].midiParser->stopPlaying();
 	_midiSlots[slot].midiParser->unloadMusic();
 	_midiSlots[slot].track = -1;
