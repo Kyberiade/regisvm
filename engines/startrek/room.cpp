@@ -27,22 +27,7 @@
 
 #include "rooms/function_map.h"
 
-#define ADD_ROOM(ROOM) {                     \
-		if (name.equalsIgnoreCase(#ROOM)) {      \
-			_roomActionList = ROOM##ActionList;  \
-			_roomTextList = ROOM##TextOffsets;   \
-			_roomStaticTextList = ROOM##Texts;   \
-		}                                        \
-	}
-
-// Rooms that the floppy version replaces with its own
-#define ADD_FLOPPY_ROOM(NAME, ROOM) {            \
-		if (name.equalsIgnoreCase(#NAME)) {      \
-			_roomActionList = ROOM##ActionList;  \
-			_roomTextList = ROOM##TextOffsets;   \
-			_roomStaticTextList = ROOM##Texts;   \
-		}                                        \
-	}
+#define ROOM_TABLES(NAME, ROOM) { #NAME, ROOM##ActionList, ROOM##TextOffsets, ROOM##Texts }
 
 #define ADD_ROOM_COMMON(PREFIX) {                        \
 		if (name.hasPrefixIgnoreCase(#PREFIX)) {         \
@@ -53,6 +38,85 @@
 
 namespace StarTrek {
 
+// The action, text offset and static text tables of a room
+struct RoomTables {
+	const char *name;
+	const RoomAction *actions;
+	const RoomTextOffsets *textOffsets;
+	const RoomText *texts;
+};
+
+static const RoomTables kRooms[] = {
+	ROOM_TABLES(demon0, demon0),
+	ROOM_TABLES(demon1, demon1),
+	ROOM_TABLES(demon2, demon2),
+	ROOM_TABLES(demon3, demon3),
+	ROOM_TABLES(demon4, demon4),
+	ROOM_TABLES(demon5, demon5),
+	ROOM_TABLES(demon6, demon6),
+	ROOM_TABLES(tug0, tug0),
+	ROOM_TABLES(tug1, tug1),
+	ROOM_TABLES(tug2, tug2),
+	ROOM_TABLES(tug3, tug3),
+	ROOM_TABLES(love0, love0),
+	ROOM_TABLES(love1, love1),
+	ROOM_TABLES(love2, love2),
+	ROOM_TABLES(love3, love3),
+	ROOM_TABLES(love4, love4),
+	ROOM_TABLES(love5, love5),
+	ROOM_TABLES(mudd0, mudd0),
+	ROOM_TABLES(mudd1, mudd1),
+	ROOM_TABLES(mudd2, mudd2),
+	ROOM_TABLES(mudd3, mudd3),
+	ROOM_TABLES(mudd4, mudd4),
+	ROOM_TABLES(mudd5, mudd5),
+	ROOM_TABLES(feather0, feather0),
+	ROOM_TABLES(feather1, feather1),
+	ROOM_TABLES(feather2, feather2),
+	ROOM_TABLES(feather3, feather3),
+	ROOM_TABLES(feather4, feather4),
+	ROOM_TABLES(feather5, feather5),
+	ROOM_TABLES(feather6, feather6),
+	ROOM_TABLES(feather7, feather7),
+	ROOM_TABLES(trial0, trial0),
+	ROOM_TABLES(trial1, trial1),
+	ROOM_TABLES(trial2, trial2),
+	ROOM_TABLES(trial3, trial3),
+	ROOM_TABLES(trial4, trial4),
+	ROOM_TABLES(trial5, trial5),
+	ROOM_TABLES(sins0, sins0),
+	ROOM_TABLES(sins1, sins1),
+	ROOM_TABLES(sins2, sins2),
+	ROOM_TABLES(sins3, sins3),
+	ROOM_TABLES(sins4, sins4),
+	ROOM_TABLES(sins5, sins5),
+	ROOM_TABLES(veng0, veng0),
+	ROOM_TABLES(veng1, veng1),
+	ROOM_TABLES(veng2, veng2),
+	ROOM_TABLES(veng3, veng3),
+	ROOM_TABLES(veng4, veng4),
+	ROOM_TABLES(veng5, veng5),
+	ROOM_TABLES(veng6, veng6),
+	ROOM_TABLES(veng7, veng7),
+	ROOM_TABLES(veng8, veng8),
+	ROOM_TABLES(demo0, demo0),
+	ROOM_TABLES(demo1, demo1),
+};
+
+// The floppy version has a shorter Vengeance away mission
+static const RoomTables kFloppyRooms[] = {
+	ROOM_TABLES(veng0, vengf0),
+	ROOM_TABLES(veng1, vengf1),
+};
+
+static const RoomTables *findRoomTables(const RoomTables *rooms, int count, const Common::String &name) {
+	for (int i = 0; i < count; i++) {
+		if (name.equalsIgnoreCase(rooms[i].name))
+			return &rooms[i];
+	}
+	return nullptr;
+}
+
 Room::Room(StarTrekEngine *vm, const Common::String &name) : _vm(vm), _awayMission(&vm->_awayMission) {
 	_roomActionList = nullptr;
 	_roomTextList = nullptr;
@@ -60,70 +124,20 @@ Room::Room(StarTrekEngine *vm, const Common::String &name) : _vm(vm), _awayMissi
 	_roomStaticTextList = nullptr;
 	_commonTextRdf = "";
 
-	ADD_ROOM(demon0)
-	ADD_ROOM(demon1)
-	ADD_ROOM(demon2)
-	ADD_ROOM(demon3)
-	ADD_ROOM(demon4)
-	ADD_ROOM(demon5)
-	ADD_ROOM(demon6)
-	ADD_ROOM(tug0)
-	ADD_ROOM(tug1)
-	ADD_ROOM(tug2)
-	ADD_ROOM(tug3)
-	ADD_ROOM(love0)
-	ADD_ROOM(love1)
-	ADD_ROOM(love2)
-	ADD_ROOM(love3)
-	ADD_ROOM(love4)
-	ADD_ROOM(love5)
-	ADD_ROOM_COMMON(love)
-	ADD_ROOM(mudd0)
-	ADD_ROOM(mudd1)
-	ADD_ROOM(mudd2)
-	ADD_ROOM(mudd3)
-	ADD_ROOM(mudd4)
-	ADD_ROOM(mudd5)
-	ADD_ROOM_COMMON(mudd)
-	ADD_ROOM(feather0)
-	ADD_ROOM(feather1)
-	ADD_ROOM(feather2)
-	ADD_ROOM(feather3)
-	ADD_ROOM(feather4)
-	ADD_ROOM(feather5)
-	ADD_ROOM(feather6)
-	ADD_ROOM(feather7)
-	ADD_ROOM(trial0)
-	ADD_ROOM(trial1)
-	ADD_ROOM(trial2)
-	ADD_ROOM(trial3)
-	ADD_ROOM(trial4)
-	ADD_ROOM(trial5)
-	ADD_ROOM(sins0)
-	ADD_ROOM(sins1)
-	ADD_ROOM(sins2)
-	ADD_ROOM(sins3)
-	ADD_ROOM(sins4)
-	ADD_ROOM(sins5)
-	ADD_ROOM(veng0)
-	ADD_ROOM(veng1)
-	ADD_ROOM(veng2)
-	ADD_ROOM(veng3)
-	ADD_ROOM(veng4)
-	ADD_ROOM(veng5)
-	ADD_ROOM(veng6)
-	ADD_ROOM(veng7)
-	ADD_ROOM(veng8)
-	ADD_ROOM_COMMON(veng)
-
-	// The floppy version has a shorter Vengeance away mission
-	if (vm->isFloppyVersion()) {
-		ADD_FLOPPY_ROOM(veng0, vengf0)
-		ADD_FLOPPY_ROOM(veng1, vengf1)
+	const RoomTables *tables = nullptr;
+	if (vm->isFloppyVersion())
+		tables = findRoomTables(kFloppyRooms, ARRAYSIZE(kFloppyRooms), name);
+	if (!tables)
+		tables = findRoomTables(kRooms, ARRAYSIZE(kRooms), name);
+	if (tables) {
+		_roomActionList = tables->actions;
+		_roomTextList = tables->textOffsets;
+		_roomStaticTextList = tables->texts;
 	}
 
-	ADD_ROOM(demo0)
-	ADD_ROOM(demo1)
+	ADD_ROOM_COMMON(love)
+	ADD_ROOM_COMMON(mudd)
+	ADD_ROOM_COMMON(veng)
 
 	if (_roomActionList == nullptr) {
 		warning("Room \"%s\" unimplemented", name.c_str());
