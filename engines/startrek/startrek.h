@@ -1014,6 +1014,7 @@ public:
 	Common::SeekableReadStream *_demoEvents;
 	uint32 _demoEventsStart;
 	uint32 _demoPlaybackStartMillis;
+	uint32 _pauseStartMillis;
 	Common::Point _demoMousePos;
 
 	// The battle of the DOS demo, while it runs

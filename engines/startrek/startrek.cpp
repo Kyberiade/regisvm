@@ -112,6 +112,8 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_iwFile = nullptr;
 	_demoEvents = nullptr;
 	_demoPlaybackStartMillis = 0;
+	_pauseStartMillis = 0;
+	_frameStartMillis = 0;
 
 	_showSubtitles = true;
 	_shipDitheringEnabled = true;
@@ -585,6 +587,15 @@ void StarTrekEngine::pauseEngineIntern(bool pause) {
 	Engine::pauseEngineIntern(pause);
 	if (_sound)
 		_sound->pauseMidi(pause);
+
+	// The ticks and the recorded input of the DOS demo continue after the pause
+	if (pause) {
+		_pauseStartMillis = _system->getMillis();
+	} else {
+		uint32 pauseTime = _system->getMillis() - _pauseStartMillis;
+		_frameStartMillis += pauseTime;
+		_demoPlaybackStartMillis += pauseTime;
+	}
 }
 
 void StarTrekEngine::syncSoundSettings() {
