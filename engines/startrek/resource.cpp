@@ -96,6 +96,13 @@ ResourceIndex Resource::getIndex(Common::String filename) {
 	return index;
 }
 
+// The offsets of the index and of the runs have 24 bits
+static uint32 readUint24(Common::SeekableReadStream *stream, bool bigEndian) {
+	byte bytes[3];
+	stream->read(bytes, 3);
+	return bigEndian ? READ_BE_UINT24(bytes) : READ_LE_UINT24(bytes);
+}
+
 ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
 	ResourceIndex index;
 
@@ -133,10 +140,7 @@ ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
 		index.indexOffset = indexFile->readUint32LE();
 		index.uncompressedSize = indexFile->readUint16LE();
 	} else {
-		if (_platform == Common::kPlatformAmiga)
-			index.indexOffset = (indexFile->readByte() << 16) + (indexFile->readByte() << 8) + indexFile->readByte();
-		else
-			index.indexOffset = indexFile->readByte() + (indexFile->readByte() << 8) + (indexFile->readByte() << 16);
+		index.indexOffset = readUint24(indexFile, _platform == Common::kPlatformAmiga);
 
 		if (index.indexOffset & (1 << 23)) {
 			index.fileCount = (index.indexOffset >> 16) & 0x7F;
@@ -193,10 +197,7 @@ uint32 Resource::getSequentialFileOffset(uint32 offset, int fileIndex) {
 	dataRunFile->seek(offset);
 
 	bool bigEndian = _platform == Common::kPlatformAmiga;
-	if (bigEndian)
-		offset = (dataRunFile->readByte() << 16) + (dataRunFile->readByte() << 8) + dataRunFile->readByte();
-	else
-		offset = dataRunFile->readByte() + (dataRunFile->readByte() << 8) + (dataRunFile->readByte() << 16);
+	offset = readUint24(dataRunFile, bigEndian);
 
 	for (uint16 i = 0; i < fileIndex; i++)
 		offset += bigEndian ? dataRunFile->readUint16BE() : dataRunFile->readUint16LE();
