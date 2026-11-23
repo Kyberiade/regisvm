@@ -548,10 +548,15 @@ void Sound::setMusicEnabled(bool enable) {
 
 	_vm->_musicEnabled = enable;
 
-	if (enable)
+	// The DOS demo plays its own music files
+	if (enable && (_vm->getFeatures() & GF_DEMO)) {
+		if (!_demoBackgroundMusic.empty())
+			playDemoMidiFile(0, _demoBackgroundMusic);
+	} else if (enable) {
 		playMidiTrackInSlot(0, _loopingMidiTrack);
-	else
+	} else {
 		clearMidiSlot(0);
+	}
 }
 
 void Sound::toggleSfx() {
