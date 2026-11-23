@@ -82,7 +82,8 @@ void StarTrekEngine::pollEvents(bool queueEvents) {
 						_sound->toggleMusic();
 					break;
 				} else if (event.kbd.keycode == Common::KEYCODE_p) {
-					pauseUntilKeyPress();
+					if (!event.kbdRepeat)
+						pauseUntilKeyPress();
 					break;
 				}
 			}
@@ -240,7 +241,7 @@ void StarTrekEngine::pauseUntilKeyPress() {
 	while (!shouldQuit()) {
 		Common::Event event;
 		while (_eventMan->pollEvent(event)) {
-			if (event.type == Common::EVENT_KEYDOWN
+			if (event.type == Common::EVENT_KEYDOWN && !event.kbdRepeat
 			        && (event.kbd.keycode < Common::KEYCODE_NUMLOCK || event.kbd.keycode > Common::KEYCODE_COMPOSE)) {
 				// The keys released during the pause are not held anymore
 				_heldKey = Common::KEYCODE_INVALID;
