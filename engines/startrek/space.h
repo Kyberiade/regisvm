@@ -22,6 +22,7 @@
 #ifndef STARTREK_SPACE_H
 #define STARTREK_SPACE_H
 
+#include "common/serializer.h"
 #include "common/str.h"
 
 #include "fixedint.h"
@@ -232,6 +233,9 @@ struct R3 {
 	Common::String planetName; // 0xa4
 	uint16 planetSeed; // 0xb0
 	int16 planetColors; // 0xb2
+
+	// The engine saves the references to other ships
+	void saveLoadWithSerializer(Common::Serializer &ser);
 };
 
 // 2.14 fixed-point multiplications, with the products summed before shifting

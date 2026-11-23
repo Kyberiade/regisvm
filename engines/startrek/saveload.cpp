@@ -564,7 +564,7 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 			delete _orbitObjectR3.bitmap;
 			_orbitObjectR3.bitmap = nullptr;
 		}
-		syncR3(ser, _orbitObjectR3);
+		_orbitObjectR3.saveLoadWithSerializer(ser);
 		if (ser.isLoading()) {
 			// Older savegames may contain an uninitialized orbit object
 			if (_orbitObjectR3.field1e != 3 || _orbitObjectR3.field20 < 4 || _orbitObjectR3.field20 > 7)
@@ -623,45 +623,46 @@ static void syncMatrix(Common::Serializer &ser, Matrix &matrix) {
 	}
 }
 
-void StarTrekEngine::syncR3(Common::Serializer &ser, R3 &r3) {
-	syncPoint(ser, r3.pos);
-	syncMatrix(ser, r3.matrix);
-	ser.syncAsSint16LE(r3.field1e);
-	ser.syncAsSint16LE(r3.field20);
-	ser.syncAsSint16LE(r3.field22);
-	ser.syncAsSint16LE(r3.field24);
+// The fields keep their order and widths for the existing savegames
+void R3::saveLoadWithSerializer(Common::Serializer &ser) {
+	syncPoint(ser, pos);
+	syncMatrix(ser, matrix);
+	ser.syncAsSint16LE(field1e);
+	ser.syncAsSint16LE(field20);
+	ser.syncAsSint16LE(field22);
+	ser.syncAsSint16LE(field24);
 	for (int i = 0; i < 3; i++)
-		ser.syncAsSint16LE(r3.speed[i]);
+		ser.syncAsSint16LE(speed[i]);
 
-	for (int i = 0; i < ARRAYSIZE(r3.systems); i++) {
-		ser.syncAsSint16LE(r3.systems[i].present);
-		ser.syncAsSint16LE(r3.systems[i].maxStrength);
-		ser.syncAsSint16LE(r3.systems[i].strength);
+	for (int i = 0; i < ARRAYSIZE(systems); i++) {
+		ser.syncAsSint16LE(systems[i].present);
+		ser.syncAsSint16LE(systems[i].maxStrength);
+		ser.syncAsSint16LE(systems[i].strength);
 	}
-	ser.syncAsSint32LE(r3.maxTurnRate);
-	ser.syncAsSint32LE(r3.turnAcceleration);
-	ser.syncAsSint32LE(r3.maxSpeed);
-	ser.syncAsSint32LE(r3.speedAcceleration);
-	ser.syncAsSint32LE(r3.commandedSpeed);
-	syncPoint(ser, r3.targetTurnRate);
-	ser.syncAsSint32LE(r3.targetSpeed);
-	ser.syncAsSint32LE(r3.currentSpeed);
-	syncPoint(ser, r3.turnRate);
-	syncPoint(ser, r3.turnAngle);
-	ser.syncAsSint16LE(r3.field140);
-	ser.syncAsSint16LE(r3.energy);
-	syncBool(ser, r3.shieldsOn);
-	syncBool(ser, r3.shieldsActive);
-	syncBool(ser, r3.weaponsOn);
-	syncBool(ser, r3.weaponsActive);
+	ser.syncAsSint32LE(maxTurnRate);
+	ser.syncAsSint32LE(turnAcceleration);
+	ser.syncAsSint32LE(maxSpeed);
+	ser.syncAsSint32LE(speedAcceleration);
+	ser.syncAsSint32LE(commandedSpeed);
+	syncPoint(ser, targetTurnRate);
+	ser.syncAsSint32LE(targetSpeed);
+	ser.syncAsSint32LE(currentSpeed);
+	syncPoint(ser, turnRate);
+	syncPoint(ser, turnAngle);
+	ser.syncAsSint16LE(field140);
+	ser.syncAsSint16LE(energy);
+	syncBool(ser, shieldsOn);
+	syncBool(ser, shieldsActive);
+	syncBool(ser, weaponsOn);
+	syncBool(ser, weaponsActive);
 
-	ser.syncAsSint32LE(r3.enterpriseDistance);
-	ser.syncAsSint32LE(r3.enterpriseDistanceChange);
-	syncBool(ser, r3.maneuverActive);
-	ser.syncAsSint16LE(r3.maneuver);
-	ser.syncAsSint16LE(r3.maneuverState);
-	for (int i = 0; i < ARRAYSIZE(r3.weapons); i++) {
-		ShipWeapon &weapon = r3.weapons[i];
+	ser.syncAsSint32LE(enterpriseDistance);
+	ser.syncAsSint32LE(enterpriseDistanceChange);
+	syncBool(ser, maneuverActive);
+	ser.syncAsSint16LE(maneuver);
+	ser.syncAsSint16LE(maneuverState);
+	for (int i = 0; i < ARRAYSIZE(weapons); i++) {
+		ShipWeapon &weapon = weapons[i];
 		ser.syncAsUint32LE(weapon.nextFireTime);
 		ser.syncAsSint16LE(weapon.lifetime);
 		ser.syncAsSint16LE(weapon.speed);
@@ -669,22 +670,22 @@ void StarTrekEngine::syncR3(Common::Serializer &ser, R3 &r3) {
 		syncPoint(ser, weapon.mount);
 		ser.syncAsSint16LE(weapon.shape);
 	}
-	ser.syncAsSint32LE(r3.engageRange);
-	syncBool(ser, r3.canCloak);
-	syncBool(ser, r3.cloakRequested);
-	syncBool(ser, r3.cloakActive);
-	ser.syncAsSint16LE(r3.cloakLevel);
-	syncBool(ser, r3.exploding);
-	ser.syncAsSint16LE(r3.explosionFrame);
-	syncBool(ser, r3.retreating);
+	ser.syncAsSint32LE(engageRange);
+	syncBool(ser, canCloak);
+	syncBool(ser, cloakRequested);
+	syncBool(ser, cloakActive);
+	ser.syncAsSint16LE(cloakLevel);
+	syncBool(ser, exploding);
+	ser.syncAsSint16LE(explosionFrame);
+	syncBool(ser, retreating);
 
-	ser.syncAsSint16LE(r3.planetSize);
-	ser.syncString(r3.planetName);
-	ser.syncAsUint16LE(r3.planetSeed);
-	ser.syncAsSint16LE(r3.planetColors);
-	ser.syncAsSint16LE(r3.projectileLife);
-	ser.syncAsSint16LE(r3.projectileDamage);
-	ser.syncAsSint16LE(r3.projectileColor);
+	ser.syncAsSint16LE(planetSize);
+	ser.syncString(planetName);
+	ser.syncAsUint16LE(planetSeed);
+	ser.syncAsSint16LE(planetColors);
+	ser.syncAsSint16LE(projectileLife);
+	ser.syncAsSint16LE(projectileDamage);
+	ser.syncAsSint16LE(projectileColor);
 }
 
 // Ships are saved as -1 for none, 0 for the Enterprise and 1 to 4 for the enemies
@@ -722,12 +723,12 @@ void StarTrekEngine::syncSpaceState(Common::Serializer &ser) {
 	ser.syncAsSint16LE(_emergencyPowerDuration);
 	ser.syncAsSint16LE(_repairPriority);
 
-	syncR3(ser, _enterpriseR3);
-	syncR3(ser, _planetR3);
+	_enterpriseR3.saveLoadWithSerializer(ser);
+	_planetR3.saveLoadWithSerializer(ser);
 	for (int i = 0; i < NUM_ENEMY_SHIPS; i++)
-		syncR3(ser, _enemyShips[i]);
+		_enemyShips[i].saveLoadWithSerializer(ser);
 	for (int i = 0; i < NUM_PROJECTILES; i++) {
-		syncR3(ser, _projectiles[i]);
+		_projectiles[i].saveLoadWithSerializer(ser);
 		int16 owner = getShipIndex(_projectiles[i].projectileOwner);
 		ser.syncAsSint16LE(owner);
 		_projectiles[i].projectileOwner = getShipByIndex(owner);

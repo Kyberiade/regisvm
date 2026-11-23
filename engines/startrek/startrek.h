@@ -508,7 +508,6 @@ private:
 
 	// saveload.cpp
 	void syncSpaceState(Common::Serializer &ser);
-	void syncR3(Common::Serializer &ser, R3 &r3);
 	int16 getShipIndex(const R3 *ship) const;
 	R3 *getShipByIndex(int16 index);
 
