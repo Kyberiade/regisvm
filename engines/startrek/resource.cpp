@@ -99,7 +99,8 @@ ResourceIndex Resource::getIndex(Common::String filename) {
 // The offsets of the index and of the runs have 24 bits
 static uint32 readUint24(Common::SeekableReadStream *stream, bool bigEndian) {
 	byte bytes[3];
-	stream->read(bytes, 3);
+	if (stream->read(bytes, sizeof(bytes)) != sizeof(bytes))
+		error("Incomplete resource offset");
 	return bigEndian ? READ_BE_UINT24(bytes) : READ_LE_UINT24(bytes);
 }
 
