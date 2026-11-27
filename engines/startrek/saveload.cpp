@@ -19,62 +19,171 @@
  *
  */
 
-#include "gui/saveload.h"
-
 #include "graphics/thumbnail.h"
 
 #include "common/file.h"
 #include "common/savefile.h"
 #include "common/serializer.h"
 
+#include "startrek/bridge.h"
 #include "startrek/resource.h"
 #include "startrek/room.h"
 #include "startrek/startrek.h"
 
 namespace StarTrek {
 
+bool StarTrekEngine::hasFeature(EngineFeature f) const {
+	return
+	    (f == kSupportsReturnToLauncher) ||
+	    (f == kSupportsLoadingDuringRuntime) ||
+	    (f == kSupportsSavingDuringRuntime);
+}
+
+bool StarTrekEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return _canSaveLoad;
+}
+
+bool StarTrekEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	return _canSaveLoad;
+}
+
+Common::Error StarTrekEngine::loadGameState(int slot) {
+	// The main loop loads the game after leaving the current game mode
+	_pendingLoadSlot = slot;
+	_resetGameMode = true;
+	return Common::kNoError;
+}
+
+Common::Error StarTrekEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	return saveGame(slot, desc) ? Common::kNoError : Common::kWritingFailed;
+}
+
+// The options menus can always save and load
 bool StarTrekEngine::showSaveMenu() {
-	GUI::SaveLoadChooser *dialog;
-	Common::String desc;
-	int slot;
-
-	dialog = new GUI::SaveLoadChooser(true);
-
-	slot = dialog->runModalWithCurrentTarget();
-	desc = dialog->getResultString();
-
-	if (desc.empty()) {
-		// create our own description for the saved game, the user didn't enter it
-		desc = dialog->createDefaultSaveDescription(slot);
-	}
-
-	if (desc.size() > 28)
-		desc = Common::String(desc.c_str(), 28);
-
-	delete dialog;
-
-	if (slot < 0)
-		return true;
-
-	return saveGame(slot, desc);
+	_canSaveLoad = true;
+	bool result = originalSaveLoad() ? showOriginalSaveMenu() : saveGameDialog();
+	_canSaveLoad = false;
+	return result;
 }
 
 bool StarTrekEngine::showLoadMenu() {
-	GUI::SaveLoadChooser *dialog;
-	int slot;
-
-	dialog = new GUI::SaveLoadChooser(false);
-	slot = dialog->runModalWithCurrentTarget();
-
-	delete dialog;
-
-	if (slot < 0)
-		return true;
-
-	return loadGame(slot);
+	_canSaveLoad = true;
+	bool result = originalSaveLoad() ? showOriginalLoadMenu() : loadGameDialog();
+	_canSaveLoad = false;
+	return result;
 }
 
-const uint32 CURRENT_SAVEGAME_VERSION = 1;
+struct SavedGamesMenu {
+	const char *header;
+	const SaveStateList *saves;
+};
+
+// The original lists the newest saved game first
+static SaveStateList listSavedGames(const MetaEngine *metaEngine, const Common::String &target, bool withAutosave) {
+	SaveStateList saves = metaEngine->listSaves(target.c_str());
+	SaveStateList result;
+	for (int i = saves.size() - 1; i >= 0; i--) {
+		if (withAutosave || saves[i].getSaveSlot() != metaEngine->getAutosaveSlot())
+			result.push_back(saves[i]);
+	}
+	return result;
+}
+
+Common::String StarTrekEngine::readTextFromSaveList(int choiceIndex, uintptr data, Common::String *headerTextOutput) {
+	const SavedGamesMenu *menu = (const SavedGamesMenu *)data;
+	int numSaves = menu->saves->size();
+
+	*headerTextOutput = centerTextboxHeader(localizeText(menu->header));
+	if (choiceIndex < numSaves)
+		return localizeText("Description:\n") + (*menu->saves)[choiceIndex].getDescription();
+	if (choiceIndex > numSaves)
+		return Common::String();
+	if (numSaves != 0)
+		return localizeText("Cancel.");
+	if (isFloppyVersion() && getLanguage() == Common::EN_ANY)
+		return "There are no saved games.";
+	return localizeText("#GENE\\GENERJ01#No games saved.");
+}
+
+int StarTrekEngine::chooseSavedGame(const char *header, const SaveStateList &saves) {
+	SavedGamesMenu menu = { header, &saves };
+	int index = showText(&StarTrekEngine::readTextFromSaveList, (uintptr)&menu, 20, 20, TEXTCOLOR_YELLOW, true, 0, true);
+	return index < (int)saves.size() ? index : -1;
+}
+
+bool StarTrekEngine::showOriginalSaveMenu() {
+	static const char *const options[] = {
+		"Save Game",
+		"#GENE\\GENER023#Save new game.",
+		"#GENE\\GENER019#Replace previous game.",
+		"#GENE\\GENER002#Delete previous game.",
+		"#GENE\\GENER000#Cancel.",
+		""
+	};
+	const MetaEngine *metaEngine = getMetaEngine();
+
+	while (!shouldQuit()) {
+		int choice = showText(&StarTrekEngine::readTextFromArray, (uintptr)options, 20, 20, TEXTCOLOR_YELLOW, true, 0, true);
+		SaveStateList saves = listSavedGames(metaEngine, _targetName, false);
+
+		if (choice == 0) {
+			// A new game gets the slot after the newest one
+			int slot = saves.empty() ? 1 : saves[0].getSaveSlot() + 1;
+			for (int i = 1; slot > metaEngine->getMaximumSaveSlot() && i <= metaEngine->getMaximumSaveSlot(); i++) {
+				bool used = i == metaEngine->getAutosaveSlot();
+				for (uint j = 0; j < saves.size() && !used; j++)
+					used = saves[j].getSaveSlot() == i;
+				if (!used)
+					slot = i;
+			}
+			if (slot > metaEngine->getMaximumSaveSlot()) {
+				showTextbox("", localizeText("#GENE\\GENER024#Too many games saved.  Replace or delete a previous game."), 20, 20, TEXTCOLOR_YELLOW, 0);
+				continue;
+			}
+
+			memset(_textInputBuffer, 0, TEXT_INPUT_BUFFER_SIZE - 1);
+			Common::String desc = showTextInputBox(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, localizeText("Description:\n                    "));
+			while (desc.hasPrefix(" "))
+				desc.deleteChar(0);
+			return !desc.empty() && saveGameState(slot, desc).getCode() == Common::kNoError;
+		} else if (choice == 1) {
+			int index = chooseSavedGame("Save Game", saves);
+			if (index < 0)
+				return false;
+			return saveGameState(saves[index].getSaveSlot(), saves[index].getDescription()).getCode() == Common::kNoError;
+		} else if (choice == 2) {
+			int index = chooseSavedGame("Delete Game", saves);
+			if (index >= 0)
+				metaEngine->removeSaveState(_targetName.c_str(), saves[index].getSaveSlot());
+		} else {
+			return false;
+		}
+	}
+	return false;
+}
+
+bool StarTrekEngine::showOriginalLoadMenu() {
+	SaveStateList saves = listSavedGames(getMetaEngine(), _targetName, true);
+	int index = chooseSavedGame("Load Game", saves);
+	return index >= 0 && loadGameState(saves[index].getSaveSlot()).getCode() == Common::kNoError;
+}
+
+// F5 opens the ScummVM menu, like in other engines, or the options of the game
+void StarTrekEngine::showScummVMMenu() {
+	_canSaveLoad = !(_gameDescription->desc.flags & ADGF_DEMO);
+	openMainMenuDialog();
+	_canSaveLoad = false;
+}
+
+bool StarTrekEngine::popMainLoopEvent(TrekEvent *e, bool canSaveLoad) {
+	_canSaveLoad = canSaveLoad && !(_gameDescription->desc.flags & ADGF_DEMO);
+	bool result = popNextEvent(e);
+	_canSaveLoad = false;
+	// Nothing else happens after loading a game
+	return result && !_resetGameMode;
+}
+
+const uint32 CURRENT_SAVEGAME_VERSION = 5;
 
 bool StarTrekEngine::saveGame(int slot, Common::String desc) {
 	Common::String filename = getSavegameFilename(slot);
@@ -123,7 +232,7 @@ bool StarTrekEngine::loadGame(int slot) {
 	}
 
 	SavegameMetadata meta;
-	if (!saveOrLoadMetadata(in, nullptr, &meta)) {
+	if (!saveOrLoadMetadata(in, nullptr, &meta, true)) {
 		delete in;
 		return false;
 	}
@@ -155,11 +264,25 @@ bool StarTrekEngine::loadGame(int slot) {
 	} else if (_gameMode == -1) {
 		initBridge(true);
 		_lastGameMode = GAMEMODE_BRIDGE;
-		// TODO: mode change
 	} else {
-		_resource->setTxtFileName(_missionToLoad);
+		_missionName = _missionToLoad;
+		setBridgeTexts();
+
+		// The bridge loads its own music, but the game continues with the saved one
+		Common::String music = _sound->_loadedMidiFilename;
+		MidiTracks track = _sound->_loopingMidiTrack;
 		initBridge(false);
-		// TODO: mode change
+		if (!music.empty()) {
+			_sound->loadMusicFile(music);
+			_sound->_loopingMidiTrack = track;
+			_sound->playMidiTrackInSlot(0, track);
+		}
+	}
+
+	// Loading the room or the bridge stops the sounds, so the loop starts afterwards
+	if (!_sound->_loopingAudioName.empty()) {
+		_sound->stopAllVocSounds();
+		_sound->playVoc(_sound->_loopingAudioName);
 	}
 
 	return true;
@@ -176,17 +299,18 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 	}
 
 	ser.syncAsUint16LE(_gameMode);
-	// TODO: sub_1d8eb (save) / sub_1d958 (load) (probably bridge / space combat state)
 
 	Common::String midiFilename = _sound->_loadedMidiFilename;
 	ser.syncString(midiFilename);
-	ser.syncAsSint16LE(_sound->_loopingMidiTrack);
+	int16 loopingMidiTrack = _sound->_loopingMidiTrack;
+	ser.syncAsSint16LE(loopingMidiTrack);
 
 	if (ser.isLoading()) {
 		if (midiFilename.empty())
 			_sound->clearAllMidiSlots();
 		else {
 			_sound->loadMusicFile(midiFilename);
+			_sound->_loopingMidiTrack = (MidiTracks)loopingMidiTrack;
 			_sound->playMidiTrackInSlot(0, _sound->_loopingMidiTrack);
 		}
 	}
@@ -198,26 +322,25 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 		ser.syncAsSint16LE(_enterpriseState.underAttack);
 		ser.syncAsSint16LE(_randomEncounterType);
 
-		int16 unkFlag1 = 0; // TODO: word_5082e (either 0 or 1)
-		ser.syncAsSint16LE(unkFlag1);
-
-		int unkVar1 = 0;	// TODO: dword_519b0
-		ser.syncAsSint32LE(unkVar1);
-
+		ser.syncAsSint16LE(_randomEncounterCountdown);
+		// Older savegames have no countdown, and the hail was shown already
+		if (ser.isLoading() && meta->version < 4)
+			_randomEncounterCountdown = -1;
+		ser.syncAsSint32LE(_missionTicks);
 		ser.syncAsSint16LE(_currentPlanet);
 		ser.syncAsSint16LE(_targetPlanet);
-
-		int16 unkFlag2 = 0; // TODO: word_45ab8 (either 0 or -1)
-		ser.syncAsSint16LE(unkFlag2);
+		ser.syncAsSint16LE(_viewDirection);
 	}
 
 	ser.syncString(_missionToLoad);
 
 	if (meta->version >= 1) {
-		int16 unkFlag3 = 0; // TODO: word_4b032 (either 0 or 1)
-		ser.syncAsSint16LE(unkFlag3);
+		int16 emergencyPowerUsed = _emergencyPowerUsed;
+		ser.syncAsSint16LE(emergencyPowerUsed);
+		_emergencyPowerUsed = emergencyPowerUsed != 0;
 
-		ser.syncAsUint16LE(_hailedTarget);
+		uint16 hailedTarget = 0;
+		ser.syncAsUint16LE(hailedTarget);
 		ser.syncAsSint16LE(_lastMissionId);
 		for (int i = 0; i < 7; i++) {
 			ser.syncAsUint16LE(_missionPoints[i]);
@@ -226,13 +349,9 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 
 	ser.syncString(_sound->_loopingAudioName);
 
-	if (ser.isLoading()) {
-		if (!_sound->_loopingAudioName.empty())
-			_sound->playVoc(_sound->_loopingAudioName);
-	}
-
 	if (meta->version >= 1) {
-		ser.syncAsSint16LE(_bridgeSequenceToLoad);
+		int16 bridgeSequence = -1;
+		ser.syncAsSint16LE(bridgeSequence);
 	}
 
 	for (int i = 0; i < NUM_OBJECTS; i++) {
@@ -408,7 +527,230 @@ bool StarTrekEngine::saveOrLoadGameData(Common::SeekableReadStream *in, Common::
 		ser.syncAsSint16LE(_warpHotspotsActive);
 	}
 
+	if (meta->version >= 2) {
+		syncSpaceState(ser);
+	} else if (ser.isLoading()) {
+		// Older savegames have no ships in space
+		for (int i = 0; i < NUM_ENEMY_SHIPS; i++) {
+			if (_enemyShips[i].field1e != 0)
+				delR3(&_enemyShips[i]);
+			_enemyShips[i] = R3();
+		}
+		removeProjectiles();
+		_targetShip = nullptr;
+	}
+
+	// The frame index above has only 16 bits, but the weapons wait for frames with 32 bits
+	if (meta->version >= 5) {
+		ser.syncAsUint32LE(_frameIndex);
+	} else if (ser.isLoading()) {
+		for (int i = -1; i < NUM_ENEMY_SHIPS; i++) {
+			R3 &ship = i < 0 ? _enterpriseR3 : _enemyShips[i];
+			for (int j = 0; j < ARRAYSIZE(ship.weapons); j++)
+				ship.weapons[j].nextFireTime = MIN<uint32>(ship.weapons[j].nextFireTime, _frameIndex);
+		}
+	}
+
+	if (meta->version >= 3) {
+		ser.syncAsSint16LE(_missionState);
+		ser.syncAsSint32LE(_missionTicks);
+		for (int i = 0; i < ARRAYSIZE(_missionVars); i++)
+			ser.syncAsSint16LE(_missionVars[i]);
+		ser.syncAsSint16LE(_missionScore);
+		ser.syncAsSint16LE(_missionMaxScore);
+		ser.syncAsSint16LE(_missionEndFlag);
+
+		if (ser.isLoading()) {
+			delete _orbitObjectR3.bitmap;
+			_orbitObjectR3.bitmap = nullptr;
+		}
+		_orbitObjectR3.saveLoadWithSerializer(ser);
+		if (ser.isLoading()) {
+			// Older savegames may contain an uninitialized orbit object
+			if (_orbitObjectR3.field1e != 3 || _orbitObjectR3.field20 < 4 || _orbitObjectR3.field20 > 7)
+				_orbitObjectR3 = R3();
+			else
+				addOrbitObject();
+		}
+	} else if (ser.isLoading()) {
+		// Older savegames only know the mission, so continue with its away mission
+		static const struct {
+			const char *mission;
+			int16 state;
+		} kMissionStates[] = {
+			{ "DEMON", kMissionDemonPollux },
+			{ "TUG", kMissionTugMasada },
+			{ "LOVE", kMissionLoveArk7 },
+			{ "MUDD", kMissionMuddDerelict },
+			{ "FEATHER", kMissionFeatherOrbit },
+			{ "TRIAL", kMissionTrialStart },
+			{ "SINS", kMissionSinsAlphaProxima },
+			{ "VENG", kMissionVengStart }
+		};
+		_missionState = kMissionNone;
+		_missionTicks = 1000;
+		Common::fill(_missionVars, _missionVars + ARRAYSIZE(_missionVars), 0);
+		_missionScore = 0;
+		_missionMaxScore = 0;
+		_missionEndFlag = 0;
+		for (int i = 0; i < ARRAYSIZE(kMissionStates); i++) {
+			if (_missionToLoad.equalsIgnoreCase(kMissionStates[i].mission))
+				_missionState = kMissionStates[i].state;
+		}
+	}
+
 	return true;
+}
+
+static void syncBool(Common::Serializer &ser, bool &value) {
+	byte b = value;
+	ser.syncAsByte(b);
+	value = b != 0;
+}
+
+static void syncPoint(Common::Serializer &ser, Point3 &point) {
+	for (int i = 0; i < 3; i++)
+		ser.syncAsSint32LE(point[i]);
+}
+
+static void syncMatrix(Common::Serializer &ser, Matrix &matrix) {
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			int16 value = matrix[i][j].raw();
+			ser.syncAsSint16LE(value);
+			matrix[i][j] = Fixed14::fromRaw(value);
+		}
+	}
+}
+
+// The fields keep their order and widths for the existing savegames
+void R3::saveLoadWithSerializer(Common::Serializer &ser) {
+	syncPoint(ser, pos);
+	syncMatrix(ser, matrix);
+	ser.syncAsSint16LE(field1e);
+	ser.syncAsSint16LE(field20);
+	ser.syncAsSint16LE(field22);
+	ser.syncAsSint16LE(field24);
+	for (int i = 0; i < 3; i++)
+		ser.syncAsSint16LE(speed[i]);
+
+	for (int i = 0; i < ARRAYSIZE(systems); i++) {
+		ser.syncAsSint16LE(systems[i].present);
+		ser.syncAsSint16LE(systems[i].maxStrength);
+		ser.syncAsSint16LE(systems[i].strength);
+	}
+	ser.syncAsSint32LE(maxTurnRate);
+	ser.syncAsSint32LE(turnAcceleration);
+	ser.syncAsSint32LE(maxSpeed);
+	ser.syncAsSint32LE(speedAcceleration);
+	ser.syncAsSint32LE(commandedSpeed);
+	syncPoint(ser, targetTurnRate);
+	ser.syncAsSint32LE(targetSpeed);
+	ser.syncAsSint32LE(currentSpeed);
+	syncPoint(ser, turnRate);
+	syncPoint(ser, turnAngle);
+	ser.syncAsSint16LE(field140);
+	ser.syncAsSint16LE(energy);
+	syncBool(ser, shieldsOn);
+	syncBool(ser, shieldsActive);
+	syncBool(ser, weaponsOn);
+	syncBool(ser, weaponsActive);
+
+	ser.syncAsSint32LE(enterpriseDistance);
+	ser.syncAsSint32LE(enterpriseDistanceChange);
+	syncBool(ser, maneuverActive);
+	ser.syncAsSint16LE(maneuver);
+	ser.syncAsSint16LE(maneuverState);
+	for (int i = 0; i < ARRAYSIZE(weapons); i++) {
+		ShipWeapon &weapon = weapons[i];
+		ser.syncAsUint32LE(weapon.nextFireTime);
+		ser.syncAsSint16LE(weapon.lifetime);
+		ser.syncAsSint16LE(weapon.speed);
+		ser.syncAsSint16LE(weapon.cooldown);
+		syncPoint(ser, weapon.mount);
+		ser.syncAsSint16LE(weapon.shape);
+	}
+	ser.syncAsSint32LE(engageRange);
+	syncBool(ser, canCloak);
+	syncBool(ser, cloakRequested);
+	syncBool(ser, cloakActive);
+	ser.syncAsSint16LE(cloakLevel);
+	syncBool(ser, exploding);
+	ser.syncAsSint16LE(explosionFrame);
+	syncBool(ser, retreating);
+
+	ser.syncAsSint16LE(planetSize);
+	ser.syncString(planetName);
+	ser.syncAsUint16LE(planetSeed);
+	ser.syncAsSint16LE(planetColors);
+	ser.syncAsSint16LE(projectileLife);
+	ser.syncAsSint16LE(projectileDamage);
+	ser.syncAsSint16LE(projectileColor);
+}
+
+// Ships are saved as -1 for none, 0 for the Enterprise and 1 to 4 for the enemies
+int16 StarTrekEngine::getShipIndex(const R3 *ship) const {
+	if (ship == &_enterpriseR3)
+		return 0;
+	for (int i = 0; i < NUM_ENEMY_SHIPS; i++) {
+		if (ship == &_enemyShips[i])
+			return i + 1;
+	}
+	return -1;
+}
+
+R3 *StarTrekEngine::getShipByIndex(int16 index) {
+	if (index == 0)
+		return &_enterpriseR3;
+	if (index >= 1 && index <= NUM_ENEMY_SHIPS)
+		return &_enemyShips[index - 1];
+	return nullptr;
+}
+
+void StarTrekEngine::syncSpaceState(Common::Serializer &ser) {
+	ser.syncAsUint32LE(_msRandState);
+	syncPoint(ser, _starfieldPosition);
+	syncMatrix(ser, _someMatrix);
+	ser.syncAsSint16LE(_viewDirection);
+	ser.syncAsSint16LE(_viewscreenZoom);
+	syncBool(ser, _enterpriseState.shields);
+	syncBool(ser, _enterpriseState.weapons);
+	syncBool(ser, _enterpriseState.targetAnalysis);
+	syncBool(ser, _emergencyPowerUsed);
+	ser.syncAsSint32LE(_emergencyPowerTicks);
+	ser.syncAsSint16LE(_emergencyPowerRate);
+	ser.syncAsSint16LE(_emergencyPowerAmount);
+	ser.syncAsSint16LE(_emergencyPowerDuration);
+	ser.syncAsSint16LE(_repairPriority);
+
+	_enterpriseR3.saveLoadWithSerializer(ser);
+	_planetR3.saveLoadWithSerializer(ser);
+	for (int i = 0; i < NUM_ENEMY_SHIPS; i++)
+		_enemyShips[i].saveLoadWithSerializer(ser);
+	for (int i = 0; i < NUM_PROJECTILES; i++) {
+		_projectiles[i].saveLoadWithSerializer(ser);
+		int16 owner = getShipIndex(_projectiles[i].projectileOwner);
+		ser.syncAsSint16LE(owner);
+		_projectiles[i].projectileOwner = getShipByIndex(owner);
+	}
+	int16 target = getShipIndex(_targetShip);
+	ser.syncAsSint16LE(target);
+	_targetShip = getShipByIndex(target);
+
+	if (ser.isLoading()) {
+		// Rebuild the list of objects in space
+		Common::fill(_r3List, _r3List + NUM_SPACE_OBJECTS, (R3 *)nullptr);
+		addR3(&_enterpriseR3);
+		addR3(&_planetR3);
+		for (int i = 0; i < NUM_ENEMY_SHIPS; i++) {
+			if (_enemyShips[i].field1e != 0)
+				addR3(&_enemyShips[i]);
+		}
+		for (int i = 0; i < NUM_PROJECTILES; i++) {
+			if (_projectiles[i].field1e != 0)
+				addR3(&_projectiles[i]);
+		}
+	}
 }
 
 Common::String StarTrekEngine::getSavegameFilename(int slotId) const {
@@ -419,7 +761,7 @@ Common::String StarTrekEngine::getSavegameFilename(int slotId) const {
 
 
 // Static function (reused in detection.cpp)
-bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta) {
+bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta, bool skipThumbnail) {
 	Common::Serializer ser(in, out);
 
 	ser.syncAsUint32LE(meta->version);
@@ -427,7 +769,7 @@ bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out
 
 	// Thumbnail
 	if (ser.isLoading()) {
-		if (!::Graphics::loadThumbnail(*in, meta->thumbnail))
+		if (!::Graphics::loadThumbnail(*in, meta->thumbnail, skipThumbnail))
 			meta->thumbnail = nullptr;
 	} else
 		::Graphics::saveThumbnail(*out);

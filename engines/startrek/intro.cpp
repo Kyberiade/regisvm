@@ -25,16 +25,31 @@
 namespace StarTrek {
 
 void StarTrekEngine::playIntro() {
-	// TODO: .MT audio file
+	const bool isMac = getPlatform() == Common::kPlatformMacintosh;
+
+	// The Mac CD shows a QuickTime movie instead of the starfield
+	if (isMac && (getFeatures() & GF_CDROM)) {
+		showMacLogo(60);
+		playMovieMac("Intro Movie");
+		_gfx->clearBackgroundImage();
+		return;
+	}
 
 	_frameIndex = 0;
+	_shipDitheringEnabled = false;
+
+	// Sets up the instruments of the MT-32
+	if (_sound->isMT32()) {
+		_sound->loadMusicFile("init");
+		_sound->playMidiMusicTracks(MIDITRACK_0);
+	}
 
 	initStarfieldPosition();
 	initStarfield(10, 20, 309, 169, 128);
 
 	initStarfieldSprite(&_starfieldSprite, new StubBitmap(0, 0), _starfieldRect);
 
-	//delR3(&_enterpriseR3); // TODO: uncomment
+	delR3(&_enterpriseR3);
 
 	R3 planetR3 = R3();
 	planetR3.matrix = initMatrix();
@@ -44,13 +59,19 @@ void StarTrekEngine::playIntro() {
 
 	_gfx->clearScreenAndPriBuffer();
 	_gfx->fadeoutScreen();
-	_gfx->loadPalette("gold");
-	_gfx->setBackgroundImage("goldlogo");
-	_sound->playVoc("logo");
-	_gfx->copyBackgroundScreen();
-	_system->updateScreen();
-	_system->delayMillis(10);
-	_gfx->fadeinScreen();
+	if (isMac) {
+		// The Mac loads the title music before its MacPlay logo
+		_sound->loadMusicFile("title");
+		showMacLogo(36);
+	} else {
+		_gfx->loadPalette("gold");
+		_gfx->setBackgroundImage("goldlogo");
+		_sound->playVoc("logo");
+		_gfx->copyBackgroundScreen();
+		_system->updateScreen();
+		_system->delayMillis(10);
+		_gfx->fadeinScreen();
+	}
 
 	uint32 clockTicks = _clockTicks;
 
@@ -88,20 +109,25 @@ void StarTrekEngine::playIntro() {
 		index -= 1;
 	}
 
-	// TODO: kirkintr
-
 	clockTicks += 540;
 
-	while (_clockTicks < clockTicks && _sound->isMidiPlaying()) {
+	while (!isMac && _clockTicks < clockTicks && _sound->isMidiPlaying()) {
 		waitForNextTick(true);
 	}
 
-	// TODO: MT audio file
+	if (_sound->isMT32()) {
+		_sound->playMidiMusicTracks(MIDITRACK_1);
+		while (_sound->isMidiPlaying() && !shouldQuit())
+			waitForNextTick(true);
+	}
 
 	_gfx->fadeoutScreen();
 	_gfx->loadPalette("bridge");
 	_gfx->clearScreenAndPriBuffer();
-	_sound->loadMusicFile("title");
+	// The logo must not show up where the subtitles were
+	_gfx->clearBackgroundImage();
+	if (!isMac)
+		_sound->loadMusicFile("title");
 	clockTicks = _clockTicks;
 
 	int32 starfieldZoomSpeed = 0;
@@ -163,7 +189,6 @@ void StarTrekEngine::playIntro() {
 			loadSubtitleSprite(3, &subtitleSprite);
 			initIntroR3ObjectToMove(&planetR3, 0, 5000, 0, 5000, 0);
 			planetR3.pos.y = -2500;
-			planetR3.pos.z = -1;
 			initIntroR3ObjectToMove(&_enterpriseR3, -30, 450, 45, 540, 54);
 			break;
 
@@ -179,7 +204,6 @@ void StarTrekEngine::playIntro() {
 			loadSubtitleSprite(6, &subtitleSprite);
 			initIntroR3ObjectToMove(&planetR3, 30, 5600, 30, 5600, 0);
 			planetR3.pos.y = -2500;
-			planetR3.pos.z = -1;
 			initIntroR3ObjectToMove(&_enterpriseR3, -10, 800, 155, 600, 18);
 			break;
 
@@ -187,7 +211,8 @@ void StarTrekEngine::playIntro() {
 			loadSubtitleSprite(6, &subtitleSprite);
 			break;
 
-		case 162:
+		case 162: // The starfield moves again
+			starfieldZoomSpeed = 10;
 			delR3(&planetR3);
 			break;
 
@@ -196,22 +221,23 @@ void StarTrekEngine::playIntro() {
 			initIntroR3ObjectToMove(&_enterpriseR3, 340, 5000, 0, 0, 18);
 			break;
 
-		case 186:
+		case 186: // The title flies away from the camera
 			delR3(&_enterpriseR3);
 			showCreditsScreen(&planetR3, 0, false);
 			initIntroR3ObjectToMove(&planetR3, 0, 0, 0, _starfieldPointDivisor, 18);
-			// TODO: the rest
 			break;
 
-		case 204:
-			// TODO
+		case 204: // The title stays in front of the camera
+			planetR3.pos.z = _starfieldPosition.z + _starfieldPointDivisor;
+			planetR3.speed.z = 0;
 			break;
 
 		case 216:
-			// TODO
+			subtitleSprite.setBitmap(_resource->loadBitmapFile("legal"));
 			break;
 
 		case 222:
+			subtitleSprite.setBitmap(_resource->loadBitmapFile("blank"));
 			delR3(&planetR3);
 			break;
 
@@ -300,15 +326,22 @@ void StarTrekEngine::playIntro() {
 		}
 
 		_starfieldPosition.z += starfieldZoomSpeed;
+		_enterpriseR3.pos.x += _enterpriseR3.speed.x;
+		_enterpriseR3.pos.z += _enterpriseR3.speed.z + starfieldZoomSpeed;
+		planetR3.pos.x += planetR3.speed.x;
+		planetR3.pos.z += planetR3.speed.z + starfieldZoomSpeed;
 
 		frame++;
 		if (frame >= 0x186)
 			frame = 0x186;
 	}
 
+	addR3(&_enterpriseR3);
+	_enterpriseR3.field1e = 2;
+
 	_gfx->fadeoutScreen();
 	_gfx->delSprite(&_starfieldSprite);
-	// TODO: the rest
+	_shipDitheringEnabled = true;
 }
 
 void StarTrekEngine::showCreditsScreen(R3 *creditsBuffer, int index, bool deletePrevious) {
@@ -327,31 +360,26 @@ void StarTrekEngine::showCreditsScreen(R3 *creditsBuffer, int index, bool delete
 }
 
 void StarTrekEngine::initIntroR3ObjectToMove(R3 *r3, int16 srcAngle, int16 srcDepth, int16 destAngle, int16 destDepth, int16 ticks) {
-	int32 srcAngleX = (int32)floor((double)_sineTable.at(srcAngle / 90) * srcDepth);
-	int32 srcAngleZ = (int32)floor((double)_cosineTable.at(srcAngle / 90) * srcDepth);
-	r3->pos = Point3(srcAngleX + _starfieldPosition.x, 0, srcAngleZ + _starfieldPosition.z);
+	// Angles are given in degrees
+	srcAngle = ((int32)srcAngle << 9) / 180;
+	destAngle = ((int32)destAngle << 9) / 180;
 
-	int32 destAngleX = (int32)floor((double)_sineTable.at(destAngle / 90) * destDepth);
-	int32 destAngleZ = (int32)floor((double)_cosineTable.at(destAngle / 90) * destDepth);
-	int32 deltaX = destAngleX + _starfieldPosition.x - r3->pos.x;
-	int32 deltaZ = destAngleZ + _starfieldPosition.z - r3->pos.z;
-	Angle angle = atan2(deltaX, deltaZ);
+	r3->pos.x = fixedMult(srcDepth, angleSin(srcAngle)) + _starfieldPosition.x;
+	r3->pos.y = 0;
+	r3->pos.z = fixedMult(srcDepth, angleCos(srcAngle)) + _starfieldPosition.z;
 
-	r3->matrix = initSpeedMatrixForXZMovement(angle, initMatrix());
-
-	debugCN(5, kDebugSpace, "initIntroR3ObjectToMove: pos %x,%x,%x; ", r3->pos.x, r3->pos.y, r3->pos.z);
+	int32 deltaX = fixedMult(destDepth, angleSin(destAngle)) + _starfieldPosition.x - r3->pos.x;
+	int32 deltaZ = fixedMult(destDepth, angleCos(destAngle)) + _starfieldPosition.z - r3->pos.z;
+	r3->matrix = initSpeedMatrixForXZMovement(angleAtan2(deltaX, deltaZ), initMatrix());
 
 	if (ticks != 0) {
-		debugC(5, kDebugSpace, "speed %x,%x,%x\n", r3->speed.x, r3->speed.y, r3->speed.z);
 		r3->speed.x = deltaX / ticks;
 		r3->speed.z = deltaZ / ticks;
-		r3->speed.y = 0;
 	} else {
-		debugC(5, kDebugSpace, "speed 0\n");
 		r3->speed.x = 0;
 		r3->speed.z = 0;
-		r3->speed.y = 0;
 	}
+	r3->speed.y = 0;
 }
 
 void StarTrekEngine::loadSubtitleSprite(int index, Sprite *sprite) {

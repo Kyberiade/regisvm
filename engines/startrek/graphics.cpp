@@ -24,10 +24,13 @@
 #include "startrek/resource.h"
 
 #include "common/algorithm.h"
+#include "common/array.h"
 #include "common/config-manager.h"
 #include "common/events.h"
+#include "common/file.h"
 #include "common/rendermode.h"
 #include "graphics/cursorman.h"
+#include "graphics/fonts/amigafont.h"
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
 
@@ -35,6 +38,7 @@ namespace StarTrek {
 
 Graphics::Graphics(StarTrekEngine *vm) : _vm(vm), _egaMode(false) {
 	_font = nullptr;
+	_amigaFont = nullptr;
 	_egaData = nullptr;
 	_lutData = nullptr;
 
@@ -50,6 +54,13 @@ Graphics::Graphics(StarTrekEngine *vm) : _vm(vm), _egaMode(false) {
 
 	if (_vm->getGameType() == GType_ST25 && _vm->getPlatform() != Common::kPlatformAmiga)
 		_font = new Font(_vm);
+
+	if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		Common::File fontFile;
+		if (!fontFile.open("startrektiny/8"))
+			error("Could not open the font startrektiny/8");
+		_amigaFont = new ::Graphics::AmigaFont(&fontFile);
+	}
 
 	_numSprites = 0;
 	_pushedNumSprites = -1;
@@ -69,11 +80,18 @@ Graphics::~Graphics() {
 	delete _backgroundImage;
 
 	delete _font;
+	delete _amigaFont;
 }
 
 void Graphics::setBackgroundImage(Common::String imageName) {
 	delete _backgroundImage;
 	_backgroundImage = new Bitmap(_vm->_resource->loadBitmapFile(imageName));
+}
+
+void Graphics::clearBackgroundImage() {
+	delete _backgroundImage;
+	_backgroundImage = new Bitmap(SCREEN_WIDTH, SCREEN_HEIGHT);
+	memset(_backgroundImage->pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT);
 }
 
 void Graphics::drawBitmapToBackground(const Common::Rect &origRect, const Common::Rect &drawRect, Bitmap *bitmap) {
@@ -133,6 +151,12 @@ void Graphics::loadPalette(const Common::String &paletteName) {
 	Common::MemoryReadStreamEndian *palStream = _vm->_resource->loadFile(palFile.c_str());
 	palStream->read(_palData, 256 * 3);
 	delete palStream;
+
+	// The Amiga version fills the textboxes with color 0 instead of darkening them
+	if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		memset(_lutData, 0, 256);
+		return;
+	}
 
 	// Load LUT file
 	Common::MemoryReadStreamEndian *lutStream = _vm->_resource->loadFile(lutFile.c_str());
@@ -196,6 +220,20 @@ void Graphics::setPaletteFadeLevel(byte *palData, int fadeLevel) {
 	_vm->_system->delayMillis(10);
 }
 
+// Rotates a range of colors of the unfaded palette
+void Graphics::cyclePalette(int start, int count, int offset) {
+	byte colors[256 * 3];
+	for (int i = 0; i < count; i++) {
+		const byte *src = _palData + (start + (i + offset) % count) * 3;
+		for (int c = 0; c < 3; c++) {
+			colors[i * 3 + c] = src[c];
+			if (_vm->getPlatform() == Common::kPlatformDOS || _vm->getPlatform() == Common::kPlatformMacintosh)
+				colors[i * 3 + c] <<= 2;
+		}
+	}
+	_vm->_system->getPaletteManager()->setPalette(colors, start, count);
+}
+
 void Graphics::incPaletteFadeLevel() {
 	if (_paletteFadeLevel < 100) {
 		_paletteFadeLevel += 10;
@@ -213,7 +251,27 @@ void Graphics::decPaletteFadeLevel() {
 
 void Graphics::loadPri(const Common::String &priFile) {
 	Common::MemoryReadStream *priStream = _vm->_resource->loadFile(priFile + ".pri");
-	priStream->read(_priData, SCREEN_WIDTH * SCREEN_HEIGHT / 2);
+
+	if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		// The Amiga version has four bitplanes, the lowest bit first
+		const int planeSize = SCREEN_WIDTH * SCREEN_HEIGHT / 8;
+		Common::Array<byte> planes(SCREEN_WIDTH * SCREEN_HEIGHT / 2);
+		priStream->read(planes.data(), planes.size());
+		for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+			byte value = 0;
+			for (int plane = 0; plane < 4; plane++) {
+				if (planes[plane * planeSize + i / 8] & (0x80 >> (i % 8)))
+					value |= 1 << plane;
+			}
+			if (i % 2)
+				_priData[i / 2] |= value;
+			else
+				_priData[i / 2] = value << 4;
+		}
+	} else {
+		priStream->read(_priData, SCREEN_WIDTH * SCREEN_HEIGHT / 2);
+	}
+
 	delete priStream;
 }
 
@@ -237,7 +295,14 @@ byte Graphics::getPriValue(int x, int y) {
 }
 
 Common::Point Graphics::getMousePos() {
-	return _vm->_system->getEventManager()->getMousePos();
+	// The DOS demo plays recorded input in the away mission
+	if (_vm->_demoEvents)
+		return _vm->_demoMousePos;
+	// After a dialog of ScummVM, the position may be outside of the game screen
+	Common::Point pos = _vm->_system->getEventManager()->getMousePos();
+	pos.x = CLIP<int16>(pos.x, 0, SCREEN_WIDTH - 1);
+	pos.y = CLIP<int16>(pos.y, 0, SCREEN_HEIGHT - 1);
+	return pos;
 }
 
 void Graphics::setMouseBitmap(Common::String bitmapName) {
@@ -252,11 +317,21 @@ void Graphics::setMouseBitmap(Common::String bitmapName) {
 		0
 	);
 
+	Cursor cursor;
+	cursor.pixels.resize(bitmap->width * bitmap->height);
+	if (!cursor.pixels.empty())
+		memcpy(cursor.pixels.data(), bitmap->pixels, cursor.pixels.size());
+	cursor.size = Common::Point(bitmap->width, bitmap->height);
+	cursor.hotspot = Common::Point(bitmap->xoffset, bitmap->yoffset);
+	_cursors.push_back(cursor);
+
 	delete bitmap;
 }
 
 void Graphics::popMouseBitmap() {
 	CursorMan.popCursor();
+	if (!_cursors.empty())
+		_cursors.pop_back();
 }
 
 void Graphics::toggleMouse(bool visible) {
@@ -265,10 +340,28 @@ void Graphics::toggleMouse(bool visible) {
 
 void Graphics::lockMousePosition(int16 x, int16 y) {
 	_lockedMousePos = Common::Point(x, y);
+	updateLockedMouse();
 }
 
 void Graphics::unlockMousePosition() {
+	if (_lockedMousePos.x == -1)
+		return;
 	_lockedMousePos = Common::Point(-1, -1);
+	updateLockedMouse();
+}
+
+// Like the original, this moves the cursor image instead of the mouse. The recorded
+// input of the DOS demo moves it the same way.
+void Graphics::updateLockedMouse() {
+	if (_cursors.empty() || _cursors.back().pixels.empty())
+		return;
+	const Cursor &cursor = _cursors.back();
+	Common::Point hotspot = cursor.hotspot;
+	if (_vm->_demoEvents)
+		hotspot += _vm->_system->getEventManager()->getMousePos() - _vm->_demoMousePos;
+	else if (_lockedMousePos.x != -1)
+		hotspot += getMousePos() - _lockedMousePos;
+	CursorMan.replaceCursor(cursor.pixels.data(), cursor.size.x, cursor.size.y, hotspot.x, hotspot.y, 0);
 }
 
 void Graphics::warpMouse(int16 x, int16 y) {
@@ -354,23 +447,29 @@ void Graphics::drawSprite(const Sprite &sprite, ::Graphics::Surface *surface, co
 	}
 
 	case 3: { // Text
+		if (_amigaFont) {
+			drawAmigaTextbox(sprite, dest, rect);
+			break;
+		}
+
 		// The sprite's "bitmap" is not actually a bitmap, but instead the list of
 		// characters to display.
 
 		// Units of this rect are "characters" instead of pixels. This contains all
 		// characters to be drawn.
 		Common::Rect rectangle1;
+		const int charHeight = _font->getCharHeight();
 
 		rectangle1.left   = (rect.left   - sprite.drawX) / 8;
-		rectangle1.top    = (rect.top    - sprite.drawY) / 8;
+		rectangle1.top    = (rect.top    - sprite.drawY) / charHeight;
 		rectangle1.right  = (rect.right  - sprite.drawX + 7) / 8;
-		rectangle1.bottom = (rect.bottom - sprite.drawY + 7) / 8;
+		rectangle1.bottom = (rect.bottom - sprite.drawY + charHeight - 1) / charHeight;
 
 		int drawWidth = rectangle1.width();
 		int drawHeight = rectangle1.height();
 
 		dest = (byte *)surface->getPixels() + sprite.drawY * SCREEN_WIDTH + sprite.drawX
-		       + rectangle1.top * 8 * SCREEN_WIDTH + rectangle1.left * 8;
+		       + rectangle1.top * charHeight * SCREEN_WIDTH + rectangle1.left * 8;
 
 		byte *src = sprite.bitmap->pixels + rectangle1.top * sprite.bitmap->width / 8 + rectangle1.left;
 
@@ -386,7 +485,7 @@ void Graphics::drawSprite(const Sprite &sprite, ::Graphics::Surface *surface, co
 
 				byte *fontData = _font->getCharData(c);
 
-				for (int i = 0; i < 8; i++) {
+				for (int i = 0; i < charHeight; i++) {
 					for (int j = 0; j < 8; j++) {
 						byte b = *fontData;
 
@@ -403,12 +502,12 @@ void Graphics::drawSprite(const Sprite &sprite, ::Graphics::Surface *surface, co
 					dest += SCREEN_WIDTH - 8;
 				}
 
-				dest -= (SCREEN_WIDTH * 8 - 8);
+				dest -= (SCREEN_WIDTH * charHeight - 8);
 				src++;
 			}
 
 			src += (sprite.bitmap->width / 8) - drawWidth;
-			dest += (SCREEN_WIDTH * 8) - drawWidth * 8;
+			dest += (SCREEN_WIDTH * charHeight) - drawWidth * 8;
 
 		}
 
@@ -586,8 +685,10 @@ void Graphics::forceDrawAllSprites(bool updateScreenFlag) {
 }
 
 void Graphics::updateScreen() {
-	if (_lockedMousePos.x != -1)
-		_vm->_system->warpMouse(_lockedMousePos.x, _lockedMousePos.y);
+	if (_lockedMousePos.x != -1 || _vm->_demoEvents)
+		updateLockedMouse();
+	if (_vm->_gameMode == GAMEMODE_AWAYMISSION)
+		_vm->updateHotspots();
 
 	_vm->_system->updateScreen();
 	_vm->_system->delayMillis(10);
@@ -647,6 +748,14 @@ void Graphics::delSprite(Sprite *sprite) {
 	error("delSprite: sprite not in list");
 }
 
+bool Graphics::hasSprite(const Sprite *sprite) const {
+	for (int i = 0; i < _numSprites; i++) {
+		if (_sprites[i] == sprite)
+			return true;
+	}
+	return false;
+}
+
 void Graphics::pushSprites() {
 	if (_pushedNumSprites != -1)
 		error("Tried to push sprites more than once");
@@ -665,8 +774,76 @@ void Graphics::popSprites() {
 	_pushedNumSprites = -1;
 }
 
+// Like the Amiga version, which draws textboxes with the graphics.library
+void Graphics::drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::Rect &rect) {
+	TextBitmap *bitmap = (TextBitmap *)sprite.bitmap;
+	int width = bitmap->width;
+	int height = bitmap->height;
+
+	byte color;
+	if (sprite.textColor == 0xc0)
+		color = 0xb1;
+	else if (sprite.textColor == 0xa1)
+		color = 0xa1;
+	else if (sprite.textColor == 0x88)
+		color = 0x2c;
+	else
+		color = 0xb0;
+
+	// The textbox is drawn again only when it changes
+	if (bitmap->amigaPixels.size() != (uint)(width * height) || bitmap->amigaDrawnLines != bitmap->amigaLines
+	        || bitmap->amigaDrawnColor != color) {
+		drawAmigaTextboxPixels(bitmap, color);
+		bitmap->amigaDrawnLines = bitmap->amigaLines;
+		bitmap->amigaDrawnColor = color;
+	}
+
+	int left = rect.left - sprite.drawX;
+	int top = rect.top - sprite.drawY;
+	for (int row = 0; row < rect.height(); row++)
+		memcpy(dest + row * SCREEN_WIDTH, &bitmap->amigaPixels[(top + row) * width + left], rect.width());
+}
+
+void Graphics::drawAmigaTextboxPixels(TextBitmap *bitmap, byte color) {
+	// Baseline of the StarTrekTiny font
+	const int kBaseline = 6;
+
+	int width = bitmap->width;
+	int height = bitmap->height;
+
+	// The surface draws into the pixels of the bitmap, which keeps them
+	bitmap->amigaPixels.resize(width * height);
+	::Graphics::Surface box;
+	box.init(width, height, width, bitmap->amigaPixels.data(), ::Graphics::PixelFormat::createFormatCLUT8());
+	box.fillRect(Common::Rect(width, height), 0);
+	box.hLine(0, 0, width - 1, 0x78);
+	box.vLine(width - 1, 0, height - 1, 0x78);
+	box.hLine(0, height - 1, width - 1, 0x78);
+	box.vLine(0, 1, height - 1, 0x78);
+
+	int y = 8;
+	uint line = 0;
+	if (!bitmap->amigaLines.empty() && !bitmap->amigaLines[0].empty()) {
+		const Common::String &header = bitmap->amigaLines[0];
+		box.hLine(1, 12, width - 2, 0x78);
+		_amigaFont->drawString(&box, header, (width - _amigaFont->getStringWidth(header)) / 2, y - kBaseline, width, color);
+		y += 12;
+	}
+	for (line = 1; line < bitmap->amigaLines.size(); line++) {
+		_amigaFont->drawString(&box, bitmap->amigaLines[line], 2, y - kBaseline, width - 2, color);
+		y += 8;
+	}
+}
+
 byte *Graphics::getFontGfx(char c) {
 	return _font->getCharData(c & 0xff);
+}
+
+int Graphics::getFontHeight() const {
+	// The Amiga font has a height of 8 pixels
+	if (!_font)
+		return 8;
+	return _font->getCharHeight();
 }
 
 void Graphics::copyBackgroundScreen() {

@@ -24,7 +24,22 @@
 
 #include "engines/advancedDetector.h"
 
+#define GAMEOPTION_EASIER_COMBAT      GUIO_GAMEOPTIONS1
+#define GAMEOPTION_CHARACTERS_ANIMATE GUIO_GAMEOPTIONS2
+#define GAMEOPTION_COPY_PROTECTION    GUIO_GAMEOPTIONS3
+#define GAMEOPTION_ONE_HIT_COMBAT     GUIO_GAMEOPTIONS4
+#define GAMEOPTION_ORIGINAL_SAVELOAD  GUIO_GAMEOPTIONS5
+#define GAMEOPTION_TEXT_FIXES         GUIO_GAMEOPTIONS6
+
 namespace StarTrek {
+
+enum StarTrekDebugChannels {
+	kDebugSound = 1,
+	kDebugGraphics,
+	kDebugSavegame,
+	kDebugSpace,
+	kDebugGeneral,
+};
 
 enum StarTrekGameType {
 	GType_ST25 = 1,

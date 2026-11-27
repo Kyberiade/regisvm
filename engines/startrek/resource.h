@@ -75,6 +75,15 @@ public:
 		_txtFilename = txtFileName;
 	}
 
+	void setTextFixes(Common::Language language, bool fixTexts) {
+		_language = language;
+		_fixTexts = fixTexts;
+	}
+
+	void setMacCDTexts(bool macCDTexts) {
+		_macCDTexts = macCDTexts;
+	}
+
 	Common::List<ResourceIndex> _resources;
 
 private:
@@ -89,6 +98,11 @@ private:
 	Common::Platform _platform;
 	bool _isDemo;
 	Common::String _txtFilename;
+	Common::Language _language;
+	bool _fixTexts;
+	bool _macCDTexts;
+
+	int getMacCDTextIndex(int textIndex) const;
 	//Common::List<ResourceIndex> _resources;
 };
 

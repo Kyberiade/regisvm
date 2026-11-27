@@ -33,6 +33,10 @@
 using Common::SharedPtr;
 using Common::String;
 
+namespace Graphics {
+class AmigaFont;
+}
+
 namespace StarTrek {
 
 class Font;
@@ -51,6 +55,7 @@ public:
 	~Graphics();
 
 	void setBackgroundImage(Common::String imageName);
+	void clearBackgroundImage();
 	/**
 	 * @param origRect The rectangle containing the original bitmap (must contain the
 	 *                 whole bitmap, even if some is outside the drawable space)
@@ -101,6 +106,7 @@ public:
 	 */
 	void lockMousePosition(int16 x, int16 y);
 	void unlockMousePosition();
+	void updateLockedMouse();
 	void warpMouse(int16 x, int16 y);
 
 	void drawSprite(const Sprite &sprite, ::Graphics::Surface *surface);
@@ -137,19 +143,27 @@ public:
 
 	void addSprite(Sprite *sprite);
 	void delSprite(Sprite *sprite);
+	int16 getPaletteFadeLevel() const { return _paletteFadeLevel; }
+	void cyclePalette(int start, int count, int offset);
+	bool hasSprite(const Sprite *sprite) const;
 
 	// Save/load the current state of sprites. Can only push once for now.
 	void pushSprites();
 	void popSprites();
 
 	byte *getFontGfx(char c);
+	int getFontHeight() const;
 
 	void copyBackgroundScreen();
 	void loadEGAData(const char *egaFile);
 	void drawBackgroundImage(const char *filename);
 
+	void drawAmigaTextbox(const Sprite &sprite, byte *dest, const Common::Rect &rect);
+	void drawAmigaTextboxPixels(TextBitmap *bitmap, byte color);
+
 public:
 	Font *_font;
+	::Graphics::AmigaFont *_amigaFont;
 
 private:
 	StarTrekEngine *_vm;
@@ -172,7 +186,15 @@ private:
 	Sprite *_pushedSprites[MAX_SPRITES];
 	int _pushedNumSprites;
 
+	// The cursor is drawn at the locked position while the mouse moves freely
 	Common::Point _lockedMousePos;
+	struct Cursor {
+		Common::Array<byte> pixels;
+		Common::Point size;
+		Common::Point hotspot;
+	};
+	// Analogous to the stack of the cursor manager
+	Common::Array<Cursor> _cursors;
 };
 
 } // End of namespace StarTrek

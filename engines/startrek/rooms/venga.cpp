@@ -28,32 +28,27 @@ enum vengTextIds {
 	TX_SPEAKER_KIRK, TX_SPEAKER_MCCOY, TX_SPEAKER_SPOCK, TX_SPEAKER_ELASI_CAPTAIN, TX_SPEAKER_UHURA,
 	TX_VEN2_098, TX_VEN2_028, TX_VEN2_066, TX_VENA_F32, TX_VENA_F34,
 	TX_VENA_F40, TX_VEN6N007, TX_VEN4N010, TX_VEN2U093, TX_MUD4_018,
-	TX_BRIDU146, /*TX_DEM3_019, TX_VEN4_016, TX_G_014,*/ TX_VEN0_016
+	TX_BRIDU146
 };
 
-// TODO: Finish floppy offsets
 extern const RoomTextOffsets vengTextOffsets[] = {
-	{ TX_SPEAKER_KIRK, 6590, 0, 0, 0 },
-	{ TX_SPEAKER_MCCOY, 6601, 0, 0, 0 },
-	{ TX_SPEAKER_SPOCK, 6611, 0, 0, 0 },
-	{ TX_SPEAKER_UHURA, 6672, 0, 0, 0 },
-	{ TX_SPEAKER_ELASI_CAPTAIN, 6682, 0, 0, 0 },
-	{ TX_VEN2_098, 5016, 0, 0, 0 },
-	{ TX_VEN2_028, 6128, 0, 0, 0 },
-	{ TX_VEN2_066, 6206, 0, 0, 0 },
-	{ TX_VENA_F32, 5246, 0, 0, 0 },
-	{ TX_VENA_F34, 5516, 0, 0, 0 },
-	{ TX_VENA_F40, 5111, 0, 0, 0 },
-	{ TX_VEN6N007, 5735, 0, 0, 0 },
-	{ TX_VEN4N010, 5670, 0, 0, 0 },
-	{ TX_VEN2U093, 6021, 0, 0, 0 },
-	{ TX_MUD4_018, 5820, 0, 0, 0 },
-	{ TX_BRIDU146, 5889, 0, 0, 0 },
-	//{ TX_DEM3_019, 0, 0, 0, 0 },	// Examining dead guy 1
-	//{ TX_VEN4_016, 0, 0, 0, 0 },	// Examining dead guy 2
-	//{ TX_G_014, 0, 0, 0, 0 },	// Examining dead guy 3
-	{ TX_VEN0_016, 8838, 0, 0, 0 },	// Examining dead guy 4
-	{          -1, 0,    0, 0, 0 }
+	{ TX_SPEAKER_KIRK, 6590, 1317, 6920, 6996, 1314, 1314, 1323, 1314, 6573 },
+	{ TX_SPEAKER_MCCOY, 6601, 1328, 6931, 7007, 1325, 1327, 1334, 1325, 6584 },
+	{ TX_SPEAKER_SPOCK, 6611, 1338, 6941, 7017, 1335, 1337, 1344, 1335, 6594 },
+	{ TX_SPEAKER_UHURA, 6672, 0, 7002, 7078, 0, 0, 0, 0, 6655 },
+	{ TX_SPEAKER_ELASI_CAPTAIN, 6682, 0, 7012, 7088, 0, 0, 0, 0, 6665 },
+	{ TX_VEN2_098, 5016, 0, 5290, 5345, 0, 0, 0, 0, 4999 },
+	{ TX_VEN2_028, 6128, 0, 6418, 6523, 0, 0, 0, 0, 6111 },
+	{ TX_VEN2_066, 6206, 0, 6513, 6605, 0, 0, 0, 0, 6189 },
+	{ TX_VENA_F32, 5246, 0, 5536, 5589, 0, 0, 0, 0, 5229 },
+	{ TX_VENA_F34, 5516, 0, 5813, 5886, 0, 0, 0, 0, 5499 },
+	{ TX_VENA_F40, 5111, 0, 5396, 5454, 0, 0, 0, 0, 5094 },
+	{ TX_VEN6N007, 5735, 0, 6008, 6125, 0, 0, 0, 0, 5718 },
+	{ TX_VEN4N010, 5670, 0, 5952, 6057, 0, 0, 0, 0, 5653 },
+	{ TX_VEN2U093, 6021, 0, 6298, 6417, 0, 0, 0, 0, 6004 },
+	{ TX_MUD4_018, 5820, 0, 6101, 6205, 0, 0, 0, 0, 5803 },
+	{ TX_BRIDU146, 5889, 0, 6168, 6273, 0, 0, 0, 0, 5872 },
+	{          -1, 0,    0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 void Room::vengaTick() {
@@ -136,39 +131,23 @@ void Room::vengaUseCommunicator() {
 		showText(TX_SPEAKER_SPOCK, TX_VEN2_066);
 }
 
-void Room::vengaUseMccoyOnDeadGuy() {
-	showText(TX_SPEAKER_MCCOY, TX_VEN0_016);
-
-	// TODO: Implement the random description again?
-#if 0
-	int val = getRandomWordInRange(0, 5);
-
-	switch (val) {
+// The texts are in the RDF file of each room
+void Room::vengaUseMccoyOnDeadGuy(TextRef text0, TextRef text1, TextRef text2, TextRef text3) {
+	switch (getRandomWordInRange(0, 5)) {
 	case 0:
-		// NOTE: The exact text differs from the text used in DEM3. But, in order for this
-		// text indexing scheme to work, two rooms can't use the same audio with different
-		// text. Original was "He's dead, jim." instead of "He's dead, Jim...".
-		showText(TX_SPEAKER_MCCOY, TX_DEM3_019);
+		showText(TX_SPEAKER_MCCOY, text0);
 		break;
-
 	case 1:
-		showText(TX_SPEAKER_MCCOY, TX_VEN4_016);
+		showText(TX_SPEAKER_MCCOY, text1);
 		break;
-
 	case 2:
 	case 3:
-		showText(TX_SPEAKER_MCCOY, TX_G_014);
+		showText(TX_SPEAKER_MCCOY, text2);
 		break;
-
-	case 4:
-	case 5:
-		showText(TX_SPEAKER_MCCOY, TX_VEN0_016);
-		break;
-
 	default:
+		showText(TX_SPEAKER_MCCOY, text3);
 		break;
 	}
-#endif
 }
 
 }

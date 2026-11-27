@@ -21,6 +21,10 @@
 
 #include "base/plugins.h"
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
+
 #include "engines/advancedDetector.h"
 
 #include "graphics/thumbnail.h"
@@ -28,6 +32,7 @@
 #include "common/config-manager.h"
 #include "common/file.h"
 #include "common/savefile.h"
+#include "common/translation.h"
 
 #include "startrek/startrek.h"
 
@@ -51,7 +56,103 @@ Common::Language StarTrekEngine::getLanguage() const {
 	return _gameDescription->desc.language;
 }
 
+bool StarTrekEngine::isMacDemo() const {
+	return getPlatform() == Common::kPlatformMacintosh && (_gameDescription->desc.flags & ADGF_DEMO);
+}
+
+bool StarTrekEngine::easierCombat() const {
+	return ConfMan.getBool("easier_combat");
+}
+
+bool StarTrekEngine::oneHitCombat() const {
+	return ConfMan.getBool("one_hit_combat");
+}
+
+// The Mac versions use the dialogs of the system
+bool StarTrekEngine::originalSaveLoad() const {
+	return getPlatform() != Common::kPlatformMacintosh && ConfMan.getBool("originalsaveload");
+}
+
+// The DOS and Amiga versions only animate them with enough memory
+bool StarTrekEngine::textFixes() const {
+	return ConfMan.getBool("text_fixes");
+}
+
+bool StarTrekEngine::charactersAnimate() const {
+	return ConfMan.getBool("characters_animate");
+}
+
 } // End of Namespace StarTrek
+
+static const ADExtraGuiOptionsMap optionsList[] = {
+	{
+		GAMEOPTION_EASIER_COMBAT,
+		{
+			_s("Easier combat"),
+			_s("Makes starship combat extremely easy"),
+			"easier_combat",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_ONE_HIT_COMBAT,
+		{
+			_s("Very easy combat"),
+			_s("One hit defeats an enemy ship"),
+			"one_hit_combat",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_CHARACTERS_ANIMATE,
+		{
+			_s("Characters animate"),
+			_s("Lets the characters move while they are standing"),
+			"characters_animate",
+			true,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_COPY_PROTECTION,
+		{
+			_s("Enable copy protection"),
+			_s("The destination of each mission isn't preselected on the star map"),
+			"copy_protection",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_ORIGINAL_SAVELOAD,
+		{
+			_s("Use original save/load screens"),
+			_s("Use the original save/load screens instead of the ScummVM ones"),
+			"originalsaveload",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_TEXT_FIXES,
+		{
+			_s("Fix text errors"),
+			_s("Corrects typos and translates the texts that the original left untranslated"),
+			"text_fixes",
+			true,
+			0,
+			0
+		}
+	},
+	AD_EXTRA_GUI_OPTIONS_TERMINATOR
+};
 
 class StarTrekMetaEngine : public AdvancedMetaEngine<StarTrek::StarTrekGameDescription> {
 public:
@@ -59,7 +160,12 @@ public:
 		return "startrek";
 	}
 
+	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
+		return optionsList;
+	}
+
 	bool hasFeature(MetaEngineFeature f) const override;
+	Common::KeymapArray initKeymaps(const char *target) const override;
 	Common::Error createInstance(OSystem *syst, Engine **engine, const StarTrek::StarTrekGameDescription *desc) const override;
 
 	SaveStateList listSaves(const char *target) const override;
@@ -78,6 +184,20 @@ bool StarTrekMetaEngine::hasFeature(MetaEngineFeature f) const {
 	    (f == kSavesSupportCreationDate) ||
 	    (f == kSavesSupportPlayTime) ||
 	    (f == kSimpleSavesNames);
+}
+
+Common::KeymapArray StarTrekMetaEngine::initKeymaps(const char *target) const {
+	Common::KeymapArray keymaps = AdvancedMetaEngine::initKeymaps(target);
+
+	// Only enabled in the away missions, where the key is free
+	Common::Keymap *keymap = new Common::Keymap(Common::Keymap::kKeymapTypeGame, "startrek-away", _("Away mission keymappings"));
+	Common::Action *act = new Common::Action(Common::kStandardActionToggleHotspots, _("Show hotspots"));
+	act->setEvent(Common::EVENT_HOTSPOTS_SHOW);
+	act->addDefaultInputMapping("h");
+	keymap->addAction(act);
+	keymaps.push_back(keymap);
+
+	return keymaps;
 }
 
 Common::Error StarTrekMetaEngine::createInstance(OSystem *syst, Engine **engine, const StarTrek::StarTrekGameDescription *desc) const {
@@ -102,7 +222,7 @@ SaveStateList StarTrekMetaEngine::listSaves(const char *target) const {
 			Common::InSaveFile *in = saveFileMan->openForLoading(*file);
 			if (in) {
 				StarTrek::SavegameMetadata meta;
-				StarTrek::saveOrLoadMetadata(in, nullptr, &meta);
+				StarTrek::saveOrLoadMetadata(in, nullptr, &meta, true);
 				delete in;
 
 				uint16 descriptionPos = 0;
@@ -161,6 +281,7 @@ SaveStateDescriptor StarTrekMetaEngine::querySaveMetaInfos(const char *target, i
 		}
 
 		SaveStateDescriptor descriptor(this, slotNr, meta.description);
+		descriptor.setAutosave(slotNr == getAutosaveSlot());
 
 		if (meta.thumbnail == nullptr) {
 			return SaveStateDescriptor();

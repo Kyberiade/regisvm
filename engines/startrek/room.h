@@ -141,6 +141,7 @@ public:
 	 * all rooms).
 	 */
 	Common::Point getBeamInPosition(int crewmanIndex);
+	Common::Point getDemoCrewPosition(int entryIndex, int crewmanIndex);
 
 	/**
 	 * This is analogous to above, but instead of beaming in, they just appear in a spot.
@@ -173,6 +174,8 @@ private:
 	const RoomText *_roomStaticTextList;
 	Common::String _commonTextRdf;
 	byte *_commonRdfData;
+	// The patched texts, by their ID
+	Common::HashMap<uint16, Common::String> _patchedTexts;
 
 	byte *loadRoomRDF(Common::String fileName);
 	void loadRoomMessages();
@@ -270,7 +273,8 @@ private:
 	/**
 	 * Cmd 0x11
 	 */
-	void endMission(int16 score, int16 arg2, int16 arg3);
+	void endMission(int16 score, int16 maxScore, int16 endFlag);
+	void endDosDemoMission();
 	/**
 	 * Cmd 0x12
 	 */
@@ -2524,6 +2528,7 @@ public:
 	void veng1ReachedDoor();
 	void veng1TouchedTurbolift();
 	void veng1LookAtDeadGuy();
+	void veng1UseMccoyOnDeadGuy();
 	void veng1UseSTricorderOnVent();
 	void veng1LookAtPanel();
 	void veng1LookAtDoor();
@@ -2647,6 +2652,7 @@ public:
 	void veng3LookAtSickbayDoor();
 	void veng3LookAtCable();
 	void veng3LookAtDeadGuy();
+	void veng3UseMccoyOnDeadGuy();
 	void veng3LookAtKirk();
 	void veng3LookAtMccoy();
 	void veng3LookAtSpock();
@@ -2723,6 +2729,7 @@ public:
 	void veng5LookAtDoor();
 	void veng5LookAtLadder();
 	void veng5LookAtDeadGuy();
+	void veng5UseMccoyOnDeadGuy();
 	void veng5LookAtPowerPack();
 	void veng5LookAtDebris();
 	void veng5LookAtKirk();
@@ -2770,6 +2777,7 @@ public:
 	void veng6LookAtMccoy();
 	void veng6LookAtRedshirt();
 	void veng6LookAtDeadGuy();
+	void veng6UseMccoyOnDeadGuy();
 	void veng6LookAnywhere();
 	void veng6TalkToKirk();
 	void veng6TalkToSpock();
@@ -2812,6 +2820,7 @@ public:
 	void veng7TouchedTurboliftDoor();
 	void veng7LookAtCollapsedSection();
 	void veng7LookAtDeadGuy();
+	void veng7UseMccoyOnDeadGuy();
 	void veng7LookAtDoor();
 	void veng7LookAtCable();
 	void veng7LookAtKirk();
@@ -2878,7 +2887,82 @@ public:
 	void vengaUsePhaserAnywhere();
 	void vengaLookAtHypo();
 	void vengaUseCommunicator();
-	void vengaUseMccoyOnDeadGuy();
+	void vengaUseMccoyOnDeadGuy(TextRef text0, TextRef text1, TextRef text2, TextRef text3);
+
+	// VENGF0 (floppy)
+	void vengf0Tick1();
+	void vengf0Tick10();
+	void vengf0Tick50();
+	void vengf0UseSTricorderOnComputerBank();
+	void vengf0UseSTricorderOnChair();
+	void vengf0UseMccoyOnDeadCrew();
+	void vengf0TalkToKirk();
+	void vengf0TalkToMccoy();
+	void vengf0TalkToSpock();
+	void vengf0TalkToRedshirt();
+	void vengf0UseCommunicator();
+	void vengf0TouchedHotspot0();
+	void vengf0LookAtPatterson();
+	void vengf0LookAtDeadCrewman();
+	void vengf0LookAtComputerBank();
+	void vengf0LookAtChair();
+	void vengf0LookAtKirk();
+	void vengf0LookAtSpock();
+	void vengf0LookAtMccoy();
+	void vengf0LookAtRedshirt();
+	void vengf0LookAtDeadMan();
+	void vengf0UseMccoyOnDeadMan();
+	void vengf0MccoyReachedDeadMan();
+	void vengf0MccoyExaminedDeadMan();
+
+	// VENGF1 (floppy)
+	void vengf1Tick1();
+	void vengf1TalkToKirk();
+	void vengf1TalkToMccoy();
+	void vengf1TalkToSpock();
+	void vengf1TalkToRedshirt();
+	void vengf1UseMccoyOnDeadGuy();
+	void vengf1UseMedkitOnBrittany();
+	void vengf1UseMTricorderOnBrittany();
+	void vengf1UseMccoyOnBrittany();
+	void vengf1WalkMccoyToBrittany();
+	void vengf1MccoyReachedBrittany();
+	void vengf1UsedMedkitOnBrittany();
+	void vengf1MccoyScannedBrittany();
+	void vengf1TalkToBrittany();
+	void vengf1UseCommunicator();
+	void vengf1LookAtLeftBed();
+	void vengf1LookAtRightBed();
+	void vengf1LookAtLeftBedReadings();
+	void vengf1LookAtRightBedReadings();
+	void vengf1LookAtDoor();
+	void vengf1LookAtKirk();
+	void vengf1LookAtSpock();
+	void vengf1LookAtMccoy();
+	void vengf1LookAtRedshirt();
+	void vengf1LookAtBrittany();
+	void vengf1TouchedHotspot0();
+	void vengf1WalkToDoor();
+
+	// DEMO0 (DOS demo)
+	void demo0Tick100();
+	void demo0TalkToPrelate();
+	void demo0OffendPrelate();
+	void demo0LookAtPrelate();
+	void demo0UsePhaserOnPrelate();
+	void demo0LookAtSign();
+	void demo0LookAtColonists();
+	void demo0LookAtMountain();
+	void demo0LookAtSpock();
+	void demo0TalkToSpock();
+	void demo0TalkToRedshirt();
+	void demo0TalkToMccoy();
+	void demo0UseSTricorderAnywhere();
+	void demo0UseMTricorderOnPrelate();
+
+	// DEMO1 (DOS demo)
+	void demo1UseSTricorderOnAlien();
+	void demo1UseMTricorderOnAlien();
 
 public:
 	// Room-specific variables. This is memset'ed to 0 when the room is initialized.

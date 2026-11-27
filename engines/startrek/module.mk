@@ -2,17 +2,23 @@ MODULE := engines/startrek
 
 MODULE_OBJS = \
 	actors.o \
+	amigasound.o \
 	awaymission.o \
 	bitmap.o \
 	bridge.o \
+	bridgedisplays.o \
+	bridgemissions.o \
 	common.o \
 	console.o \
+	dosdemo.o \
+	dosdemobattle.o \
 	events.o \
 	font.o \
 	graphics.o \
 	intro.o \
 	iwfile.o \
 	lzss.o \
+	macsound.o \
 	menu.o \
 	resource.o \
 	metaengine.o \
@@ -20,6 +26,7 @@ MODULE_OBJS = \
 	saveload.o \
 	sound.o \
 	space.o \
+	spacecombat.o \
 	sprite.o \
 	startrek.o \
 	text.o \
@@ -78,7 +85,11 @@ MODULE_OBJS = \
 	rooms/veng6.o \
 	rooms/veng7.o \
 	rooms/veng8.o \
-	rooms/venga.o
+	rooms/venga.o \
+	rooms/vengf0.o \
+	rooms/vengf1.o \
+	rooms/demo0.o \
+	rooms/demo1.o
 
 
 

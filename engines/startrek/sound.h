@@ -29,12 +29,20 @@
 #include "audio/mididrv.h"
 #include "audio/mixer.h"
 
+#include "common/mutex.h"
+
 namespace Common {
 class MacResManager;
 }
 
+namespace Audio {
+class RewindableAudioStream;
+}
+
 namespace StarTrek {
 
+class AmigaSoundPlayer;
+class MacSoundPlayer;
 class StarTrekEngine;
 
 
@@ -62,6 +70,7 @@ public:
 	void playMidiTrack(MidiTracks track);
 	void playMidiTrackInSlot(int slot, MidiTracks track);
 	bool isMidiPlaying();
+	bool isMT32() const;
 	void loadMusicFile(const Common::String &baseSoundName);
 	void playMidiMusicTracks(MidiTracks startTrack, MidiLoopType loopType = kLoopTypeNone);
 	void playVoc(const Common::String &baseSoundName);
@@ -71,9 +80,25 @@ public:
 	void playSoundEffectIndex(SoundEffects index);
 	void setMusicEnabled(bool enable);
 	void setSfxEnabled(bool enable);
+	bool canToggleSfx() const;
 	void toggleMusic();
 	void toggleSfx();
+	void syncSoundSettings();
+	void pauseMidi(bool pause);
+
+	// The DOS demo plays MIDI files, for the MT-32 only. The setup of the
+	// MT-32 plays along the music.
+	void playDemoMusic(const Common::String &name);
+	void startDemoMusicSetup();
+	bool isDemoMusicSetupPlaying();
+	void stopDemoMusic();
+	void playDemoJingle(const Common::String &name);
+	void restartDemoMusic();
+
 	void checkLoopMusic();
+	MidiTracks getPlayingMidiTrack();
+	bool isPlayingSpeech() const;
+	void updateSpeech();
 
 private:
 	StarTrekEngine *_vm;
@@ -81,14 +106,30 @@ private:
 
 	void loadPCMusicFile(const Common::String &baseSoundName);
 	void clearMidiSlot(int slot);
+	bool isMidiSlotPlaying(int slot);
+
+	/**
+	 * Opens a sound of the CD versions, given as "<dir>\\<name>": a VOC file in "voc",
+	 * or a QuickTime movie in "Voice Data" on the Mac. Sets loop if a VOC file repeats.
+	 */
+	Audio::RewindableAudioStream *openCDSound(const Common::String &name, bool *loop);
+
+	// The players of the Amiga and Mac versions, which replace the MIDI tracks
+	AmigaSoundPlayer *_amigaPlayer;
+	MacSoundPlayer *_macPlayer;
 
 	// MIDI-Related Variables
 	MidiDriver *_midiDriver;
 	MidiPlaybackSlot _midiSlots[NUM_MIDI_SLOTS]; // 0 is for music; 1-7 are for sfx
+	Common::Mutex _midiMutex; // For the timer of the MIDI driver
 	Common::List<MidiPlaybackSlot *> _midiSlotList; // Sorts midi slots by most recently used
 
 	byte *_loadedSoundData;
 	int _loadedSoundDataSize;
+	byte *_demoMusicData[2];
+	Common::String _demoBackgroundMusic;
+
+	void playDemoMidiFile(int slot, const Common::String &name);
 	uint32 _midiDevice;
 
 	// VOC-related variables

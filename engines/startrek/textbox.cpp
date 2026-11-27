@@ -22,6 +22,8 @@
 #include "common/events.h"
 #include "common/stream.h"
 #include "graphics/cursorman.h"
+#include "graphics/fonts/amigafont.h"
+#include "graphics/surface.h"
 
 #include "startrek/graphics.h"
 #include "startrek/resource.h"
@@ -82,15 +84,27 @@ const char *StarTrekEngine::getNextTextLine(const char *text, char *lineOutput, 
 
 void StarTrekEngine::drawTextLineToBitmap(const char *text, int textLen, int x, int y, Bitmap *bitmap) {
 	const int charWidth = 8;
+	const int charHeight = _gfx->getFontHeight();
+
+	if (_gfx->_amigaFont) {
+		::Graphics::Surface surface;
+		surface.init(bitmap->width, bitmap->height, bitmap->width, bitmap->pixels, ::Graphics::PixelFormat::createFormatCLUT8());
+		Common::Rect area(x, y, bitmap->width - 2, MIN<int>(y + 8, bitmap->height - 2));
+		if (!area.isEmpty())
+			surface.fillRect(area, 0);
+		Common::String line(text, strnlen(text, textLen));
+		_gfx->_amigaFont->drawString(&surface, line, x, y, bitmap->width - 2 - x, 0xb0);
+		return;
+	}
 
 	int textOffset = 0;
 
 	while (textOffset < textLen) {
-		Common::Rect destRect(x, y, x + 8, y + 8);
+		Common::Rect destRect(x, y, x + charWidth, y + charHeight);
 		Common::Rect bitmapRect(bitmap->width, bitmap->height);
 
 		if (destRect.intersects(bitmapRect)) {
-			// drawRect = the rectangle within the 8x8 font character that will be drawn
+			// drawRect = the rectangle within the font character that will be drawn
 			// (part of it may be clipped)
 			Common::Rect drawRect;
 			drawRect.left = bitmapRect.left - destRect.left;
@@ -136,7 +150,48 @@ void StarTrekEngine::drawTextLineToBitmap(const char *text, int textLen, int x, 
 	}
 }
 
+// The Amiga version wraps the lines by their width in the proportional font
+const char *StarTrekEngine::getNextAmigaTextLine(const char *text, Common::String *line) {
+	if (*text == '\0')
+		return nullptr;
+
+	const int maxWidth = (TEXT_CHARS_PER_LINE + 2) * 8 - 4;
+	const char *end = text;
+	const char *lastSpace = nullptr;
+	const char *next = nullptr;
+
+	while (*end != '\0' && _gfx->_amigaFont->getStringWidth(Common::String(text, end + 1)) <= maxWidth) {
+		if (*end == '\n') {
+			next = end + 1;
+			break;
+		}
+		if (*end == ' ')
+			lastSpace = end;
+		end++;
+	}
+
+	if (!next) {
+		next = end;
+		if (*end == ' ')
+			next = end + 1;
+		else if (*end != '\0' && lastSpace)
+			next = lastSpace + 1;
+	}
+
+	// Like the original, drop the character before the next line
+	*line = Common::String(text, next - (*next != '\0' ? 1 : 0));
+	return next;
+}
+
+int StarTrekEngine::getTextLineStride() const {
+	return _gfx->_amigaFont ? AMIGA_TEXT_LINE_STRIDE : TEXT_CHARS_PER_LINE;
+}
+
 Common::String StarTrekEngine::centerTextboxHeader(Common::String headerText) {
+	// The Amiga version centers the header when drawing it
+	if (_gfx->_amigaFont)
+		return headerText;
+
 	char text[TEXT_CHARS_PER_LINE + 1];
 	memset(text, ' ', sizeof(text));
 	text[TEXT_CHARS_PER_LINE] = '\0';
@@ -153,7 +208,7 @@ void StarTrekEngine::getTextboxHeader(Common::String *headerTextOutput, Common::
 	Common::String header = speakerText;
 
 	if (choiceIndex != 0)
-		header += Common::String::format(" choice %d", choiceIndex);
+		header += Common::String::format(localizeText(" choice %d"), choiceIndex);
 
 	*headerTextOutput = centerTextboxHeader(header);
 }
@@ -186,7 +241,7 @@ Common::String StarTrekEngine::readTextFromRdf(int choiceIndex, uintptr data, Co
 
 void StarTrekEngine::showTextbox(Common::String headerText, const Common::String &mainText, int xoffset, int yoffset, byte textColor, int maxTextLines) {
 	if (!headerText.empty())
-		headerText = centerTextboxHeader(headerText);
+		headerText = centerTextboxHeader(localizeText(headerText.c_str()));
 
 	int actionParam = (maxTextLines < 0 ? 0 : maxTextLines);
 
@@ -245,7 +300,13 @@ Common::String StarTrekEngine::playTextAudio(const Common::String &str) {
 }
 
 int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset, int yoffset, int textColor, bool loopChoices, int maxTextLines, bool rclickCancelsChoice) {
+	if ((getFeatures() & GF_DEMO) && textGetter == &StarTrekEngine::readTextFromArrayWithChoices)
+		return showDosDemoText((const char *const *)var);
+
 	int16 tmpTextDisplayMode = _textDisplayMode;
+
+	// Speech that ended before, like the mission title, doesn't close this textbox
+	_finishedPlayingSpeech = false;
 
 	uint32 ticksUntilClickingEnabled = 8;
 	if (_frameIndex > _textboxVar2 + 1) {
@@ -286,13 +347,13 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 	int choiceIndex = 0;
 	int scrollOffset = 0;
 	if (tmpTextDisplayMode != TEXTDISPLAY_WAIT && tmpTextDisplayMode != TEXTDISPLAY_SUBTITLES
-	        && numChoices == 1 && _sfxEnabled && !_sfxWorking)
+	        && numChoices == 1 && !_sfxWorking)
 		_textboxHasMultipleChoices = false;
 	else
 		_textboxHasMultipleChoices = true;
 
 	if (tmpTextDisplayMode >= TEXTDISPLAY_WAIT && tmpTextDisplayMode <= TEXTDISPLAY_NONE
-	        && _sfxEnabled && !_sfxWorking)
+	        && !_sfxWorking)
 		_textboxVar6 = true;
 	else
 		_textboxVar6 = false;
@@ -367,7 +428,7 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 				    textBitmap,
 				    numTextLines - scrollOffset,
 				    numTextboxLines,
-				    lineFormattedText.c_str() + scrollOffset * (TEXTBOX_WIDTH - 2),
+				    lineFormattedText.c_str() + scrollOffset * getTextLineStride(),
 				    numChoicesWithNames != 0);
 				break;
 
@@ -380,7 +441,7 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 				    textBitmap,
 				    numTextLines - scrollOffset,
 				    numTextboxLines,
-				    lineFormattedText.c_str() + scrollOffset * (TEXTBOX_WIDTH - 2),
+				    lineFormattedText.c_str() + scrollOffset * getTextLineStride(),
 				    numChoicesWithNames != 0);
 				break;
 
@@ -399,7 +460,7 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 				    textBitmap,
 				    numTextLines - scrollOffset,
 				    numTextboxLines,
-				    lineFormattedText.c_str() + scrollOffset * (TEXTBOX_WIDTH - 2),
+				    lineFormattedText.c_str() + scrollOffset * getTextLineStride(),
 				    numChoicesWithNames != 0);
 				break;
 
@@ -412,7 +473,7 @@ int StarTrekEngine::showText(TextGetterFunc textGetter, uintptr var, int xoffset
 				    textBitmap,
 				    numTextLines - scrollOffset,
 				    numTextboxLines,
-				    lineFormattedText.c_str() + scrollOffset * (TEXTBOX_WIDTH - 2),
+				    lineFormattedText.c_str() + scrollOffset * getTextLineStride(),
 				    numChoicesWithNames != 0);
 				break;
 
@@ -491,6 +552,13 @@ int StarTrekEngine::getNumTextboxLines(const Common::String &str) {
 
 	int lines = 0;
 
+	if (_gfx->_amigaFont) {
+		Common::String amigaLine;
+		while ((text = getNextAmigaTextLine(text, &amigaLine)) != nullptr)
+			lines++;
+		return lines;
+	}
+
 	while (text != nullptr) {
 		text = getNextTextLine(text, line, TEXTBOX_WIDTH - 2);
 		lines++;
@@ -503,6 +571,17 @@ Common::String StarTrekEngine::putTextIntoLines(const Common::String &_text) {
 
 	const char *text = _text.c_str();
 	String output;
+
+	if (_gfx->_amigaFont) {
+		Common::String amigaLine;
+		while ((text = getNextAmigaTextLine(text, &amigaLine)) != nullptr) {
+			amigaLine = Common::String(amigaLine.c_str(), MIN<uint>(amigaLine.size(), AMIGA_TEXT_LINE_STRIDE));
+			while (amigaLine.size() < AMIGA_TEXT_LINE_STRIDE)
+				amigaLine += ' ';
+			output += amigaLine;
+		}
+		return output;
+	}
 
 	text = getNextTextLine(text, line, TEXTBOX_WIDTH - 2);
 
@@ -530,7 +609,13 @@ TextBitmap *StarTrekEngine::initTextSprite(int *xoffsetPtr, int *yoffsetPtr, byt
 
 	int textHeight = numTextLines + linesBeforeTextStart;
 
-	TextBitmap *bitmap = new TextBitmap(TEXTBOX_WIDTH * 8, textHeight * 8);
+	TextBitmap *bitmap;
+	if (_gfx->_amigaFont) {
+		bitmap = new TextBitmap(TEXTBOX_WIDTH * 8, numTextLines * 8 + 4 + (withHeader ? 11 : 0));
+		bitmap->amigaLines.resize(numTextLines + 1);
+	} else {
+		bitmap = new TextBitmap(TEXTBOX_WIDTH * 8, textHeight * _gfx->getFontHeight(), _gfx->getFontHeight());
+	}
 
 	*sprite = Sprite();
 	sprite->drawPriority = 15;
@@ -538,7 +623,9 @@ TextBitmap *StarTrekEngine::initTextSprite(int *xoffsetPtr, int *yoffsetPtr, byt
 	sprite->bitmap = bitmap;	// This is deallocated explicitly at the end of showText()
 	sprite->textColor = textColor;
 
-	memset(bitmap->pixels, ' ', textHeight * TEXTBOX_WIDTH);
+	// The Amiga version draws the text lines instead of characters
+	if (!_gfx->_amigaFont)
+		memset(bitmap->pixels, ' ', textHeight * TEXTBOX_WIDTH);
 
 	int varC = SCREEN_WIDTH - 1 - xoffset - (bitmap->width + 0x1d) / 2;
 	if (varC < 0)
@@ -554,6 +641,17 @@ TextBitmap *StarTrekEngine::initTextSprite(int *xoffsetPtr, int *yoffsetPtr, byt
 
 	xoffset -= (bitmap->width + 0x1d) / 2;
 	yoffset -= bitmap->height;
+
+	if (_gfx->_amigaFont) {
+		_gfx->addSprite(sprite);
+		sprite->drawMode = 3;
+		sprite->pos.x = xoffset;
+		sprite->pos.y = yoffset;
+		sprite->drawPriority = 15;
+		*xoffsetPtr = xoffset;
+		*yoffsetPtr = yoffset;
+		return bitmap;
+	}
 
 	bitmap->pixels[0] = 0x10;
 	memset(&bitmap->pixels[1], 0x11, TEXTBOX_WIDTH - 2);
@@ -601,6 +699,20 @@ void StarTrekEngine::drawMainText(TextBitmap *bitmap, int numTextLines, int numT
 	if (numTextLines >= numTextboxLines)
 		numTextLines = numTextboxLines;
 
+	if (_gfx->_amigaFont) {
+		bitmap->amigaLines.resize(numTextboxLines + 1);
+		for (int i = 0; i < numTextboxLines; i++) {
+			Common::String line;
+			if (i < numTextLines) {
+				line = Common::String(text + i * AMIGA_TEXT_LINE_STRIDE, AMIGA_TEXT_LINE_STRIDE);
+				while (!line.empty() && line.lastChar() == ' ')
+					line.deleteLastChar();
+			}
+			bitmap->amigaLines[i + 1] = line;
+		}
+		return;
+	}
+
 	if (withHeader)
 		dest += TEXTBOX_WIDTH * 2; // Start of 4th row
 
@@ -644,7 +756,10 @@ Common::String StarTrekEngine::readLineFormattedText(TextGetterFunc textGetter, 
 		String lineFormattedText = putTextIntoLines(text);
 		drawMainText(textBitmap, *numTextLines, numTextboxLines, lineFormattedText, hasHeader);
 
-		memcpy(textBitmap->pixels + TEXTBOX_WIDTH + 1, headerText.c_str(), headerText.size());
+		if (_gfx->_amigaFont)
+			textBitmap->amigaLines[0] = headerText;
+		else
+			memcpy(textBitmap->pixels + TEXTBOX_WIDTH + 1, headerText.c_str(), headerText.size());
 
 		return lineFormattedText;
 	} else
@@ -654,8 +769,8 @@ Common::String StarTrekEngine::readLineFormattedText(TextGetterFunc textGetter, 
 Common::String StarTrekEngine::readTextFromArray(int choiceIndex, uintptr data, Common::String *headerTextOutput) {
 	const char **textArray = (const char **)data;
 
-	const char *headerText = textArray[0];
-	const char *mainText = textArray[choiceIndex + 1];
+	const char *headerText = textArray[0] ? localizeText(textArray[0]) : nullptr;
+	const char *mainText = localizeText(textArray[choiceIndex + 1]);
 
 	if (*mainText == '\0')
 		return Common::String(); // Technically should be nullptr...
@@ -670,8 +785,8 @@ Common::String StarTrekEngine::readTextFromArray(int choiceIndex, uintptr data, 
 Common::String StarTrekEngine::readTextFromArrayWithChoices(int choiceIndex, uintptr data, Common::String *headerTextOutput) {
 	const char **textArray = (const char **)data;
 
-	const char *headerText = textArray[0];
-	const char *mainText = textArray[choiceIndex + 1];
+	const char *headerText = textArray[0] ? localizeText(textArray[0]) : nullptr;
+	const char *mainText = textArray[choiceIndex + 1] ? localizeText(textArray[choiceIndex + 1]) : nullptr;
 
 	if (mainText == nullptr || *mainText == '\0')
 		return Common::String(); // Technically should be nullptr...
@@ -690,7 +805,7 @@ Common::String StarTrekEngine::readTextFromArrayWithChoices(int choiceIndex, uin
 }
 
 Common::String StarTrekEngine::readTextFromFoundComputerTopics(int choiceIndex, uintptr data, Common::String *headerTextOutput) {
-	if (choiceIndex >= 10)
+	if (choiceIndex >= 16)
 		return Common::String();
 
 	Common::String topicFile = (char *)data + 8 * choiceIndex;
@@ -705,12 +820,30 @@ Common::String StarTrekEngine::readTextFromFoundComputerTopics(int choiceIndex, 
 	Common::String line;
 	while (!content->eos() && !content->err()) {
 		line = content->readLine();
-		if (line == "$")
+		// The text ends at the first '$'
+		size_t end = line.findFirstOf('$');
+		if (end != Common::String::npos)
+			line = line.substr(0, end);
+
+		// Like in the original, an empty line starts a new line
+		if (line.empty()) {
+			if (end == Common::String::npos)
+				mainText += '\n';
+		} else {
+			// Most German lines lack the space at their end
+			if (textFixes() && !mainText.empty() && line[0] != ' ' && !mainText.hasSuffix(" ")
+			        && !mainText.hasSuffix("-") && !mainText.hasSuffix("#") && !mainText.hasSuffix("\n"))
+				mainText += ' ';
+			mainText += line;
+		}
+
+		if (end != Common::String::npos)
 			break;
-		mainText += line;
 	}
 	delete content;
 
+	headerText = patchText(headerText.c_str(), getLanguage(), textFixes());
+	mainText = patchText(mainText.c_str(), getLanguage(), textFixes());
 	*headerTextOutput = "R: " + headerText;
 	return mainText;
 }
@@ -760,7 +893,7 @@ Common::String StarTrekEngine::showTextInputBox(int16 x, int16 y, const Common::
 
 	bool loop = true;
 
-	while (loop) {
+	while (loop && !shouldQuit()) {
 		TrekEvent event;
 		if (!popNextEvent(&event))
 			continue;
@@ -848,7 +981,7 @@ Common::String StarTrekEngine::showTextInputBox(int16 x, int16 y, const Common::
 				break;
 
 			default: // Typed any other character
-				if (_gfx->_font->isDisplayableCharacter(event.kbd.ascii)) {
+				if (Font::isDisplayableCharacter(event.kbd.ascii)) {
 					addCharToTextInputBuffer(event.kbd.ascii);
 					if (_textInputCursorPos < MAX_TEXT_INPUT_LEN - 1)
 						_textInputCursorPos++;
@@ -882,23 +1015,18 @@ void StarTrekEngine::initTextInputSprite(int16 textboxX, int16 textboxY, const C
 	const char *headerPos = headerText.c_str();
 	int row = 0;
 
-	/*
-	// TODO: investigate this (might be unused...)
-	if (word_53100 != 0) {
-		// ...
-	}
-	*/
-
 	do {
 		headerPos = getNextTextLine(headerPos, textBuf + row * TEXTBOX_WIDTH, headerLen);
 		row++;
 	} while (headerPos != 0 && row < 11);
 
+	const int charHeight = _gfx->getFontHeight();
 	const int16 width = headerLen * 8 + 8;
-	const int16 height = row * 8 + 8;
+	const int16 height = row * charHeight + charHeight;
 
 
 	_textInputSprite.bitmap = new Bitmap(width, height);
+	memset(_textInputSprite.bitmap->pixels, 0, width * height);
 
 	_textInputSprite.bitmap->xoffset = width / 2;
 	if (textboxX + width / 2 >= SCREEN_WIDTH)
@@ -925,7 +1053,7 @@ void StarTrekEngine::initTextInputSprite(int16 textboxX, int16 textboxY, const C
 	// Draw header text
 	for (int r = 0; r < row; r++) {
 		char *text = textBuf + r * TEXTBOX_WIDTH;
-		drawTextLineToBitmap(text, strlen(text), 4, r * 8 + 4, _textInputSprite.bitmap);
+		drawTextLineToBitmap(text, strlen(text), 4, r * charHeight + 4, _textInputSprite.bitmap);
 	}
 
 	_textInputSprite.drawMode = 2;

@@ -36,9 +36,6 @@
 
 #include "engines/engine.h"
 
-#include "math/cosinetables.h"
-#include "math/sinetables.h"
-
 #include "startrek/action.h"
 #include "startrek/awaymission.h"
 #include "startrek/graphics.h"
@@ -106,6 +103,8 @@ const int MAX_MENUBUTTONS = 32;
 const int TEXTBOX_WIDTH = 26;
 const int TEXT_CHARS_PER_LINE = TEXTBOX_WIDTH - 2;
 const int MAX_TEXTBOX_LINES = 12;
+// Characters per line in the line formatted text of the Amiga version
+const int AMIGA_TEXT_LINE_STRIDE = 80;
 
 const int TEXT_INPUT_BUFFER_SIZE = 134;
 const int MAX_TEXT_INPUT_LEN = 20;
@@ -116,14 +115,6 @@ const int MAX_BAN_FILES = 16;
 
 
 
-
-enum kDebugLevels {
-	kDebugSound = 1,
-	kDebugGraphics,
-	kDebugSavegame,
-	kDebugSpace,
-	kDebugGeneral,
-};
 
 enum GameMode {
 	GAMEMODE_START = 0,
@@ -214,6 +205,26 @@ struct ComputerTopic {
 	Common::String topic;
 };
 
+const int NUM_BRIDGE_DISPLAYS = 5;
+
+enum SpaceMessage {
+	kSpaceMessageShieldsFalling = 1 << 0,
+	kSpaceMessageWeaponsOffline = 1 << 1,
+	kSpaceMessageRepaired = 1 << 2
+};
+
+// Groups of ship systems for damage control
+enum RepairGroup {
+	kRepairNone = -1,
+	kRepairHull = 0,
+	kRepairBridge = 1,
+	kRepairTorpedoes = 2,
+	kRepairPhasers = 4,
+	kRepairSensors = 6,
+	kRepairEngines = 7,
+	kRepairShields = 0xff
+};
+
 struct EnterpriseState {
 	bool shields;
 	bool weapons;
@@ -230,12 +241,15 @@ struct EnterpriseState {
 	}
 };
 
+class DosDemoBattle;
 class Graphics;
 class IWFile;
 class Sound;
 
 class StarTrekEngine : public ::Engine {
 protected:
+	friend class DosDemoBattle;
+
 	// startrek.cpp
 public:
 	StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gamedesc);
@@ -244,61 +258,163 @@ public:
 	friend class Console;
 
 	Common::Error run() override;
+	void syncSoundSettings() override;
+	void pauseEngineIntern(bool pause) override;
 	Common::Error runGameMode(int mode, bool resume);
+
+	// Markers of ScummVM for the objects of an away mission
+	void getHotspotPositions(Common::Array< ::Graphics::HotspotInfo> &hotspots) override;
+	void updateHotspots() { drawHotspots(); }
+	void setAwayMissionKeymap(bool enable);
+	void restartGame();
 
 	// Transporter room
 	void runTransportSequence(const Common::String &name);
 
 	// Bridge
 	void initBridge(bool b);
+	void setBridgeTexts();
 	void loadBridge();
 	void loadBridgeActors();
 	void cleanupBridge();
 	void runBridge();
 	void setBridgeMouseCursor();
-	void playBridgeSequence(int sequenceId);
 	void handleBridgeEvents();
+	void updateBridgeTick();
+	void showSpaceMessages();
+	void updateBridgeSpace();
+	void setMouseControllingShip(bool enable);
+	void restrictBridgeMouse();
+	void setViewscreenZoom(int16 zoom);
+	void enterFullscreenView();
+	void clearBridgeScreen();
+	void leaveFullscreenView();
+	void initViewscreenStarfield();
 	void handleBridgeComputer();
-	void showMissionPerformance(int score, int missionScoreTextId, int missionId);
+	void showMissionPerformance(int missionId, int textId, int16 score, int16 maxScore);
 
-	int _bridgeSequenceToLoad;
+	// Mission state of the bridge
+	int16 _missionState;
+	int32 _missionTicks;
+	int16 _missionVars[6];
+	// Results of the last away mission
+	int16 _missionScore;
+	int16 _missionMaxScore;
+	int16 _missionEndFlag;
+	bool _returnedFromAwayMission;
 
 private:
 	Common::String getSpeechSampleForNumber(int number);
 	void showTextboxBridge(int talker, int textId);
 	void showTextboxBridge(int talker, Common::String text);
+	void showBridgeScreenTalker(Common::String talkerId);
+	void restartBridgeScreenTalker();
+	void removeBridgeScreenTalker();
 	void showBridgeScreenTalkerWithMessage(int textId, Common::String talkerHeader, Common::String talkerId, bool removeTalker = true);
 	void showBridgeScreenTalkerWithMessages(Common::String texts[], Common::String talkerHeader, Common::String talkerId, bool removeTalker = true);
 	void showMissionStartEnterpriseFlyby(Common::String sequence, Common::String name);
-	void startBattle(Common::String enemyShip);
 	void wrongDestinationRandomEncounter();
+	bool handleRandomEncounterEvent(int type, int value);
+	void showRandomEncounterHail();
 	void bridgeCrewAction(int crewId);
-	void contactTargetAction();
-	void orbitPlanetSequence(int sequenceId);
+	void handleBridgeMenu(int menuEvent);
+	void dispatchBridgeMenu(int menuEvent);
+	void orbitPlanetSequence(int shape);
+	void addOrbitObject();
+	void removeOrbitObject();
+	void playOrbitSequence(bool enterOrbit, bool showText);
+	void startBridgeWarp();
+	void endBridgeWarp();
+	int showKirkChoices(const int *textIds);
+	void showEndCredits();
+	bool playEndCreditsFrames(R3 *r3, int frames);
+
+	// bridgemissions.cpp
+	bool handleMissionEvent(int type, int value);
+	void setMissionState(int16 state);
+	void startMission(const char *name, const char *music);
+	void playMissionFlyby(const char *sequence, const char *name);
+	void resetShipForMission();
+	void turnOffShieldsAndWeapons();
+	void setCrewStanding(bool standing);
+	void stopMissionMusic();
+	void playMissionJingle(MidiTracks track);
+	const char *getAdmiralTalker() const;
+	void showSuluText(const Common::String &text, byte color);
+	bool handleDemonEvent(int type, int value);
+	bool handleTugEvent(int type, int value);
 	void negotiateWithElasiCereth();
+	void showHostagesKilled();
 	void hailTheMasada();
+	bool handleLoveEvent(int type, int value);
+	bool handleMuddEvent(int type, int value);
+	bool handleFeatherEvent(int type, int value);
+	void negotiateWithTaraz();
+	void negotiateWithKenka();
+	bool handleTrialEvent(int type, int value);
+	void endMissionTrial();
+	bool handleSinsEvent(int type, int value);
+	bool handleVengEvent(int type, int value);
+	void returnFromRepublic();
+	void endGame();
 
 	int16 _targetPlanet;
 	int16 _currentPlanet;
 	int _currentScreenTalker;
+	Common::String _currentScreenTalkerAnim;
+	Sprite _screenTalkerSprite;
 	bool _gameIsPaused;
-	bool _hailedTarget;
-	int _deadMasadaPrisoners;
-	bool _beamDownAllowed;
-	int _missionEndFlag;
+	bool _bridgeInputLocked;
 	int16 _randomEncounterType;	// 1: Klingon, 2: Romulan, 3: Elasi
+	// Events until the enemies hail the Enterprise, -1 after the hail
+	int16 _randomEncounterCountdown;
 	int16 _lastMissionId;
 	int16 _missionPoints[7];
 
 public:
+	// dosdemo.cpp
+	void runDosDemo();
+	void initDemoEnterprise();
+	void initDemoStarfield();
+	void clearDemoScreen();
+	void waitDemoTicks(int ticks);
+	void runDemoFrame(bool fadeIn);
+	void playDemoIntro();
+	void showDemoLogo();
+	void showDemoSubtitles(const Common::String &name);
+	Common::String loadDemoText(const Common::String &name);
+	const char *readDemoTextLine(const char *pos, Common::String &line, uint maxLength);
+	Point3 initDemoR3ObjectToMove(R3 *r3, int16 srcDepth, int16 srcAngle, int16 destDepth, int16 destAngle, int16 ticks);
+	void moveDemoEnterprise();
+	void showDemoTitle();
+	void showDemoLog();
+	void playDemoAwayMission();
+	void startDemoPlayback();
+	void stopDemoPlayback();
+	bool readDemoEvent();
+	void initDemoItems();
+	void loadDemoRoomActors();
+	int showDosDemoText(const char *const *textArray);
+	const char *drawDosDemoTextbox(Sprite *sprite, const Common::String &speaker, const char *text, int16 x, int16 y);
+	void playDemoMontage();
+	void playDemoBattle();
+	void applyDemoHit(R3 *ship, R3 *projectile);
+	void playDemoEnding();
+
 	void playMovie(Common::String filename);
 	void playMovieMac(Common::String filename);
+	/**
+	 * Shows the MacPlay logo of the Mac application for the given number of
+	 * ticks (1/20 seconds), or until a key or mouse button is pressed.
+	 */
+	void showMacLogo(uint32 ticks);
 
 	uint16 getRandomWord();
 
 	// awaymission.cpp
 	void initAwayMission();
 	void runAwayMission();
+	Common::String getGroundText(int textId);
 	void cleanupAwayMission();
 	void loadRoom(const Common::String &missionName, int roomIndex);
 	void initAwayCrewPositions(int warpEntryIndex);
@@ -351,7 +467,7 @@ private:
 
 	// space.cpp (pseudo-3d)
 	void initStarfieldPosition();
-	void initStarfield(int16 x, int16 y, int16 width, int16 height, int16 arg8);
+	void initStarfield(int16 left, int16 top, int16 right, int16 bottom, int16 viewAngle);
 	void addR3(R3 *r3);
 	void delR3(R3 *r3);
 	void clearStarfieldPixels();
@@ -360,6 +476,73 @@ private:
 	R3 *sub_19f24(R3 *r3);
 	void drawR3Shape(R3 *r3);
 	bool sub_1c022(R3 *r3);
+	void loadShipDescriptor(R3 *r3, const Common::String &name);
+	void loadShipView(R3 *r3);
+	bool calcShipViewTransform(R3 *r3, double scale, double forward[4], double inverse[4]);
+	void freeShipView(R3 *r3);
+	void generatePlanetTexture(uint16 seed, int16 colors);
+	void initPlanet(R3 *r3, const Common::String &name, uint16 seed, int16 colors);
+	void loadPlanetView(R3 *r3);
+	void freePlanetView(R3 *r3);
+	void moveR3(R3 *r3);
+	void updateShipSpeed(R3 *r3, int32 targetSpeed);
+	void rotateR3(R3 *r3, int axis, int16 angle);
+
+	// spacecombat.cpp
+	void spawnEnemyShip(const Common::String &name);
+	bool hasEnemyShips();
+	void updateEnemyShips();
+	void updateEnemyShip(R3 *ship);
+	int32 randomTurnRate(R3 *ship);
+	void updateManeuver(R3 *ship);
+	void fireEnemyWeapons(R3 *ship, const Point3 &local, const Point3 &direction);
+	bool fireWeapon(R3 *ship, int weaponIndex, const Point3 *direction);
+	void fireEnterpriseWeapons(bool torpedoes);
+	void updateProjectiles();
+	void applyHit(R3 *ship, R3 *projectile);
+	void destroyShip(R3 *ship);
+	bool damageShipSystem(R3 *ship, int side, int16 damage);
+	void loadProjectileView(R3 *projectile);
+	void removeProjectiles();
+	void drawPhaserBeam(R3 *projectile);
+
+	// saveload.cpp
+	void syncSpaceState(Common::Serializer &ser);
+	int16 getShipIndex(const R3 *ship) const;
+	R3 *getShipByIndex(int16 index);
+
+	// bridgedisplays.cpp
+	void initBridgeDisplays();
+	void removeBridgeDisplays();
+	void updateBridgeDisplays();
+	void cycleBridgeColors();
+	void updateScanner();
+	void drawBridgeLine(int16 x, int16 y, int16 length, byte color);
+	void drawConsoleBars();
+	void drawBridgeBitmap(Bitmap *bitmap);
+	void drawShipPanels(R3 *ship);
+	void copyCloakedShip(Bitmap *dest, Bitmap *ship, int16 level);
+	void drawViewscreenStatic();
+
+	void playWarpSequence();
+	void initSpaceObjects();
+	void pointCameraAt(const Point3 &target, const Point_Fixed14 &up);
+	void turnCameraTowards(const Point3 &target);
+	void playOrbitArrivalSequence();
+	void playOrbitDepartureSequence();
+	void resetShipControls(R3 *r3);
+	void distributeEnergy(R3 *r3);
+	void repairShipSystems(R3 *r3);
+	void normalizeShipMatrices();
+	void updateCamera();
+
+	// Trigonometry with angles in 1/1024 of a full circle and 2.14 fixed-point values
+	void initTrigTables();
+	int16 angleSin(int16 angle);
+	int16 angleCos(int16 angle);
+	int16 angleAtan2(int16 x, int16 z);
+	int16 angleAcos(int16 value);
+	int16 angleAsin(int16 value);
 
 	Point3 constructPoint3ForStarfield(int16 x, int16 y, int16 z);
 	Point3 matrixMult(const Matrix &weight, const Point3 &point);
@@ -370,7 +553,7 @@ private:
 	 * Creates an identity matrix
 	 */
 	Matrix initMatrix();
-	Matrix initSpeedMatrixForXZMovement(Angle angle, const Matrix &matrix);
+	Matrix initSpeedMatrixForXZMovement(int16 angle, const Matrix &matrix);
 
 
 	// actors.cpp (handles actors and animations)
@@ -465,6 +648,10 @@ public:
 	 * This does not account for "tick" events (getNextEvent/popNextEvent handle that).
 	 */
 	void pollEvents(bool queueEvents = true);
+	void updateKeyboardMouse(bool queueEvents);
+	void pauseUntilKeyPress();
+	void discardMouseMoveEvents();
+	uint32 getNextTickMillis() const;
 	void waitForNextTick(bool queueEvents = true);
 	void initializeEventsAndMouse();
 	/**
@@ -500,6 +687,8 @@ public:
 	 */
 	void drawTextLineToBitmap(const char *text, int textLen, int x, int y, Bitmap *bitmap);
 
+	const char *getNextAmigaTextLine(const char *text, Common::String *line);
+	int getTextLineStride() const;
 	Common::String centerTextboxHeader(Common::String headerText);
 	void getTextboxHeader(Common::String *headerTextOutput, Common::String speakerText, int choiceIndex);
 	/**
@@ -515,6 +704,9 @@ public:
 	void showTextbox(Common::String headerText, const Common::String &mainText, int xoffset, int yoffset, byte textColor, int maxTextLines); // TODO: better name. (return type?)
 
 	Common::String skipTextAudioPrompt(const Common::String &str);
+	// For texts that the original stores in its executable
+	const char *localizeText(const char *text) const;
+	const char *localizeMacText(const char *text) const;
 	/**
 	 * Plays an audio prompt, if it exists, and returns the string starting at the end of the
 	 * prompt.
@@ -595,9 +787,9 @@ public:
 	void drawMenuButtonOutline(Bitmap *bitmap, byte color);
 	void showOptionsMenu(int x, int y);
 	void showBridgeMenu(Common::String menu, int x, int y);
-	void handleBridgeMenu(int menuEvent);
-	void showStarMap();
-	void orbitPlanet();
+	int showStarMap();
+	int chooseDestination();
+	void initSystemPlanet(int system);
 	void captainsLog();
 
 	/**
@@ -634,6 +826,7 @@ public:
 	 * This can be called from startup or from the options menu.
 	 * On startup, this tries to load the setting without user input.
 	 */
+	void showTurboliftBlockedText(int area);
 	void showTextConfigurationMenu(bool fromOptionMenu);
 
 	int loadTextDisplayMode();
@@ -665,8 +858,22 @@ private:
 
 	// saveload.cpp
 public:
+	bool hasFeature(EngineFeature f) const override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error loadGameState(int slot) override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+
 	bool showSaveMenu();
 	bool showLoadMenu();
+	void showScummVMMenu();
+	bool showOriginalSaveMenu();
+	bool showOriginalLoadMenu();
+	// Shows the saved games, returns the chosen index or -1
+	int chooseSavedGame(const char *header, const SaveStateList &saves);
+	Common::String readTextFromSaveList(int choiceIndex, uintptr data, Common::String *headerTextOutput);
+	// Pops the next event of a main loop, which can save or load meanwhile
+	bool popMainLoopEvent(TrekEvent *e, bool canSaveLoad);
 
 	bool saveGame(int slot, Common::String desc);
 	bool loadGame(int slot);
@@ -683,7 +890,15 @@ public:
 public:
 	const StarTrekGameDescription *_gameDescription;
 	uint32 getFeatures() const;
+	bool isFloppyVersion() const { return !(getFeatures() & GF_CDROM); }
 	Common::Platform getPlatform() const;
+	// The Mac demo is the floppy version with the first room of "Demon World" only
+	bool isMacDemo() const;
+	bool easierCombat() const;
+	bool oneHitCombat() const;
+	bool originalSaveLoad() const;
+	bool textFixes() const;
+	bool charactersAnimate() const;
 	uint8 getGameType() const;
 	Common::Language getLanguage() const;
 
@@ -696,7 +911,12 @@ public:
 public:
 	int _gameMode;
 	int _lastGameMode;
+	// Leaves all loops up to the main loop, like the longjmp of the original
 	bool _resetGameMode;
+	// Done by the main loop after the reset
+	int _pendingLoadSlot;
+	bool _pendingRestart;
+	bool _canSaveLoad;
 
 	// NOTE: this has a different meaning than the original game. When non-empty, a new
 	// room load is triggered, as opposed to original behaviour where this was only read
@@ -760,11 +980,16 @@ public:
 	bool _finishedPlayingSpeech;
 
 	bool _mouseControllingShip;
+	Common::KeyCode _heldKey;
 
-	// TODO: make this work.
+	// The arrow and keypad keys move the mouse, or steer the ship on the bridge.
 	// When false, the keyboard generally acts in a more specific way (ie. move mouse
 	// between items in a menu).
 	bool _keyboardControlsMouse;
+	Common::KeyCode _heldDirectionKey;
+	bool _directionKeyChanged;
+	uint32 _directionKeyTick;
+	uint32 _keyboardMouseTick;
 
 	bool _inQuitGameMenu;
 	bool _showSubtitles;
@@ -780,11 +1005,64 @@ public:
 	int16 _starfieldXVar2, _starfieldYVar2;
 	Common::Rect _starfieldRect;
 	R3 _enterpriseR3;
+	R3 _planetR3;
+	R3 _enemyShips[NUM_ENEMY_SHIPS];
+	R3 _projectiles[NUM_PROJECTILES];
+
+	// The recorded input of the away mission in the DOS demo
+	Common::SeekableReadStream *_demoEvents;
+	uint32 _demoEventsStart;
+	uint32 _demoPlaybackStartMillis;
+	uint32 _pauseStartMillis;
+	Common::Point _demoMousePos;
+
+	// The battle of the DOS demo, while it runs
+	DosDemoBattle *_demoBattle;
+	R3 _orbitObjectR3;
+	R3 *_targetShip;
+	// Shared like the random number generator of the original
+	uint32 _msRandState;
+	uint16 msRand();
+	void msSrand(uint16 seed);
+	int _spaceMessages;
+	int16 _repairPriority;
+	int16 _repairedGroup;
+	bool _emergencyPowerUsed;
+	int32 _emergencyPowerTicks;
+	int16 _emergencyPowerRate;
+	// Improved by good missions
+	int16 _emergencyPowerAmount;
+	int16 _emergencyPowerDuration;
+	byte _cloakLut[256];
+	int16 _cloakLutLevel;
+	Sprite _bridgeDisplaySprites[NUM_BRIDGE_DISPLAYS];
+	Sprite _bridgeLightSprite;
+	int16 _bridgeLightPosition;
+	Sprite _scannerSprite;
+	byte *_planetSphereMap;
+	byte _planetTexture[PLANET_TEXTURE_SIZE * PLANET_TEXTURE_SIZE];
+	Common::String _planetTextureName;
 	R3 *_r3List[NUM_SPACE_OBJECTS];
 	R3 *_orderedR3List[NUM_SPACE_OBJECTS];
 	Matrix _starPositionMatrix;
 	Matrix _someMatrix;
 	float _flt_50898;
+	int16 _sinTable[257];
+	int16 _cosTable[257];
+	int16 _tanTable[129];
+	// Turns by 0 to 32 steps of 1/1024 radians per tick
+	int16 _turnSinTable[33];
+	int16 _turnCosTable[33];
+	int32 _turnAngleTable[33];
+	// Disabled during the intro
+	bool _shipDitheringEnabled;
+	// 0 is forward, -1 detaches the camera from the Enterprise
+	int16 _viewDirection;
+	// 4 to 8, shown as magnification 1 to 5
+	int16 _viewscreenZoom;
+	bool _viewscreenFullscreen;
+	// Restored when switching back to steering
+	bool _restoreFullscreenView;
 
 	Graphics *_gfx;
 	Sound *_sound;
@@ -802,14 +1080,12 @@ private:
 	void bridgeLeftClick();
 
 	Common::RandomSource _randomSource;
-	Math::SineTable _sineTable;
-	Math::CosineTable _cosineTable;
 	Room *_room;
 	Common::List<ComputerTopic> _computerTopics;
 };
 
 // Static function
-bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta);
+bool saveOrLoadMetadata(Common::SeekableReadStream *in, Common::WriteStream *out, SavegameMetadata *meta, bool skipThumbnail = false);
 
 } // End of namespace StarTrek
 

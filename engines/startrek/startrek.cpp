@@ -23,19 +23,24 @@
 #include "base/plugins.h"
 #include "base/version.h"
 #include "common/archive.h"
+#include "common/compression/stuffit.h"
 #include "common/config-manager.h"
 #include "common/debug-channels.h"
 #include "common/error.h"
 #include "common/events.h"
 #include "common/file.h"
 #include "common/macresman.h"
+#include "common/translation.h"
 
+#include "graphics/paletteman.h"
 #include "graphics/pixelformat.h"
 #include "graphics/surface.h"
 
 #include "engines/util.h"
+#include "image/pict.h"
 #include "video/qt_decoder.h"
 
+#include "startrek/bridge.h"
 #include "startrek/console.h"
 #include "startrek/iwfile.h"
 #include "startrek/lzss.h"
@@ -52,14 +57,17 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_kirkActor(&_actorList[0]),
 	_spockActor(&_actorList[1]),
 	_mccoyActor(&_actorList[2]),
-	_redshirtActor(&_actorList[3]),
-	_sineTable(1024),
-	_cosineTable(1024) {
+	_redshirtActor(&_actorList[3]) {
 
-	if (getPlatform() == Common::kPlatformAmiga)
-		error("Amiga versions of Star Trek: 25th Anniversary are not yet supported");
-	else if (getGameType() == GType_STJR)
+	if (getGameType() == GType_STJR)
 		error("Star Trek: Judgment Rites is not yet supported");
+
+	ConfMan.registerDefault("easier_combat", false);
+	ConfMan.registerDefault("one_hit_combat", false);
+	ConfMan.registerDefault("originalsaveload", false);
+	ConfMan.registerDefault("text_fixes", true);
+	ConfMan.registerDefault("characters_animate", true);
+	ConfMan.registerDefault("copy_protection", false);
 
 	_gfx = nullptr;
 	_activeMenu = nullptr;
@@ -70,6 +78,9 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	memset(_actionOnWalkCompletionInUse, 0, sizeof(_actionOnWalkCompletionInUse));
 
 	_clockTicks = 0;
+	_frameIndex = 0;
+	_gameMode = -1;
+	_lastGameMode = -1;
 
 	_musicEnabled = true;
 	_sfxEnabled = true;
@@ -83,6 +94,12 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_mouseControllingShip = false;
 	_keyboardControlsMouse = true;
 
+	_resetGameMode = false;
+	_pendingLoadSlot = -1;
+	_demoBattle = nullptr;
+	_pendingRestart = false;
+	_canSaveLoad = false;
+
 	_inQuitGameMenu = false;
 	_textDisplayMode = TEXTDISPLAY_SUBTITLES;
 	_textboxVar2 = 0;
@@ -93,8 +110,42 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_roomIndexToLoad = 0;
 	_mapFile = nullptr;
 	_iwFile = nullptr;
+	_demoEvents = nullptr;
+	_demoPlaybackStartMillis = 0;
+	_pauseStartMillis = 0;
+	_frameStartMillis = 0;
 
 	_showSubtitles = true;
+	_shipDitheringEnabled = true;
+	_viewDirection = 0;
+	_viewscreenZoom = 6;
+	_viewscreenFullscreen = false;
+	_planetSphereMap = nullptr;
+	_targetShip = nullptr;
+	for (int i = 0; i < NUM_ENEMY_SHIPS; i++)
+		_enemyShips[i] = R3();
+	for (int i = 0; i < NUM_PROJECTILES; i++)
+		_projectiles[i] = R3();
+	_enterpriseR3 = R3();
+	_planetR3 = R3();
+	_orbitObjectR3 = R3();
+	_msRandState = 1;
+	_spaceMessages = 0;
+	_cloakLutLevel = -1;
+	_bridgeLightPosition = 0;
+	_repairPriority = kRepairNone;
+	_repairedGroup = kRepairNone;
+	_emergencyPowerUsed = false;
+	_emergencyPowerTicks = 0;
+	_emergencyPowerRate = 0;
+	_emergencyPowerAmount = 30;
+	_emergencyPowerDuration = 450;
+	_restoreFullscreenView = false;
+	_heldKey = Common::KEYCODE_INVALID;
+	_heldDirectionKey = Common::KEYCODE_INVALID;
+	_directionKeyChanged = false;
+	_directionKeyTick = 0;
+	_keyboardMouseTick = 0;
 	Common::fill(_r3List, _r3List + NUM_SPACE_OBJECTS, (R3 *)nullptr);
 	Common::fill(_orderedR3List, _orderedR3List + NUM_SPACE_OBJECTS, (R3 *)nullptr);
 
@@ -107,11 +158,17 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 	_targetPlanet = -1;
 	_currentPlanet = -1;
 	_gameIsPaused = false;
-	_hailedTarget = false;
-	_deadMasadaPrisoners = 0;
-	_beamDownAllowed = true;
+	_bridgeInputLocked = false;
+	_currentScreenTalker = -1;
+	_missionState = kMissionNone;
+	_missionTicks = 0;
+	Common::fill(_missionVars, _missionVars + ARRAYSIZE(_missionVars), 0);
+	_missionScore = 0;
+	_missionMaxScore = 0;
 	_missionEndFlag = 0;
+	_returnedFromAwayMission = false;
 	_randomEncounterType = 0;
+	_randomEncounterCountdown = -1;
 	_lastMissionId = -1;
 	Common::fill(_missionPoints, _missionPoints + 7, 0);
 
@@ -129,27 +186,53 @@ StarTrekEngine::StarTrekEngine(OSystem *syst, const StarTrekGameDescription *gam
 }
 
 StarTrekEngine::~StarTrekEngine() {
-	delete _activeMenu->nextMenu;
+	if (_activeMenu)
+		delete _activeMenu->nextMenu;
 	delete _activeMenu;
 
+	// The sounds may use the data of the engine
+	_mixer->stopAll();
 	delete _gfx;
 	delete _sound;
 	delete _resource;
+	delete[] _planetSphereMap;
+	delete _demoEvents;
 }
 
 Common::Error StarTrekEngine::run() {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "misc");
+	SearchMan.addSubDirectoryMatching(gameDataDir, "database");
 
 	bool isDemo = getFeatures() & GF_DEMO;
 	bool isCd = getFeatures() & GF_CDROM;
+
+	if (getPlatform() == Common::kPlatformMacintosh && isCd) {
+		// "Star Trek Audio" is only in the installer of the CD, if it wasn't installed
+		Common::SeekableReadStream *installer = Common::MacResManager::openFileOrDataFork("Star Trek\xc2\xae CD-ROM Installer");
+		Common::Archive *archive = installer ? Common::createStuffItArchive(installer, true) : nullptr;
+		if (archive)
+			SearchMan.add("Star Trek CD-ROM Installer", archive, -1);
+	}
+
 	_resource = new Resource(getPlatform(), isDemo);
+	_resource->setTextFixes(getLanguage(), textFixes());
+	_resource->setMacCDTexts(isCd && getPlatform() == Common::kPlatformMacintosh);
 	_gfx = new Graphics(this);
 	_sound = new Sound(this);
 	setDebugger(new Console(this));
 
 	initGraphics(SCREEN_WIDTH, SCREEN_HEIGHT);
 	initializeEventsAndMouse();
+	initTrigTables();
+
+	_enterpriseR3 = R3();
+	_enterpriseR3.matrix = initMatrix();
+	// The DOS demo has no space flight
+	if (!isDemo) {
+		loadShipDescriptor(&_enterpriseR3, "enterpri");
+		addR3(&_enterpriseR3);
+	}
 
 	if (!isDemo)
 		loadBridgeComputerTopics();
@@ -159,29 +242,117 @@ Common::Error StarTrekEngine::run() {
 	bool loadedSave = false;
 
 	if (ConfMan.hasKey("save_slot")) {
+		initSpaceObjects();
 		if (!loadGame(ConfMan.getInt("save_slot")))
 			error("Failed to load savegame %d", ConfMan.getInt("save_slot"));
 		loadedSave = true;
 	}
 
 	if (!loadedSave) {
+		// The DOS demo has its own intro and space flight
 		if (isCd || !isDemo) {
 			playIntro();
+			initSpaceObjects();
+		}
+	}
+
+	if (isCd && getPlatform() == Common::kPlatformMacintosh) {
+		// The Mac only has the text display mode in the options menu
+		if (loadTextDisplayMode() != -1)
+			showTextConfigurationMenu(false);
+	} else if (isCd) {
+		// The text display mode is asked for once
+		bool askTextDisplayMode = !loadedSave && loadTextDisplayMode() == -1;
+		if (askTextDisplayMode) {
+			_gfx->loadPalette("bridge");
+			_gfx->clearScreenAndPriBuffer();
+			_gfx->fadeinScreen();
+		}
+		showTextConfigurationMenu(false);
+		if (askTextDisplayMode)
+			_gfx->fadeoutScreen();
+	}
+
+	if (!loadedSave) {
+		if (isCd || !isDemo) {
 			_missionToLoad = "DEMON";
-			_bridgeSequenceToLoad = 0;
+			_missionState = kMissionDemonStart;
 			runGameMode(GAMEMODE_BRIDGE, false);
 		} else {
-			_missionToLoad = "DEMO";
-			_bridgeSequenceToLoad = -1;
-			runGameMode(GAMEMODE_AWAYMISSION, false);
+			runDosDemo();
 		}
 	} else {
 		_roomIndexToLoad = -1;
-		_bridgeSequenceToLoad = -1;
 		runGameMode(_gameMode, true);
 	}
 
 	return Common::kNoError;
+}
+
+// Starts a new game without the intro. The original loads SAVEGAME.NEW for this.
+void StarTrekEngine::restartGame() {
+	// The new game starts without the sound loop of the last room
+	_sound->stopAllVocSounds();
+	_sound->_loopingAudioName.clear();
+
+	for (int i = 0; i < NUM_ENEMY_SHIPS; i++) {
+		if (_enemyShips[i].field1e != 0)
+			delR3(&_enemyShips[i]);
+		_enemyShips[i] = R3();
+	}
+	removeProjectiles();
+	removeOrbitObject();
+	Common::fill(_r3List, _r3List + NUM_SPACE_OBJECTS, (R3 *)nullptr);
+
+	_enterpriseR3 = R3();
+	_enterpriseR3.matrix = initMatrix();
+	if (!(getFeatures() & GF_DEMO)) {
+		loadShipDescriptor(&_enterpriseR3, "enterpri");
+		addR3(&_enterpriseR3);
+	}
+	initSpaceObjects();
+
+	_enterpriseState = EnterpriseState();
+	_targetShip = nullptr;
+	_msRandState = 1;
+	_spaceMessages = 0;
+	_repairPriority = kRepairNone;
+	_repairedGroup = kRepairNone;
+	_emergencyPowerUsed = false;
+	_emergencyPowerTicks = 0;
+	_emergencyPowerRate = 0;
+	_emergencyPowerAmount = 30;
+	_emergencyPowerDuration = 450;
+	_viewDirection = 0;
+	_viewscreenZoom = 6;
+
+	memset(&_awayMission, 0, sizeof(_awayMission));
+	for (int i = 0; i < NUM_OBJECTS; i++)
+		_itemList[i] = g_itemList[i];
+
+	_targetPlanet = -1;
+	_currentPlanet = -1;
+	_randomEncounterType = 0;
+	_randomEncounterCountdown = -1;
+	_lastMissionId = -1;
+	Common::fill(_missionPoints, _missionPoints + 7, 0);
+	_missionToLoad = "DEMON";
+	_missionState = kMissionDemonStart;
+	_missionTicks = 0;
+	Common::fill(_missionVars, _missionVars + ARRAYSIZE(_missionVars), 0);
+	_missionScore = 0;
+	_missionMaxScore = 0;
+	_missionEndFlag = 0;
+	_returnedFromAwayMission = false;
+	_bridgeInputLocked = false;
+	_frameIndex = 0;
+
+	// The bridge is set up again by the game loop
+	if (_gameMode == GAMEMODE_BRIDGE) {
+		cleanupBridge();
+		_lastGameMode = -1;
+	}
+	_gameMode = GAMEMODE_BRIDGE;
 }
 
 Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
@@ -199,10 +370,18 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 			_gameMode = GAMEMODE_BRIDGE;
 	}
 
-	while (true) {
+	while (!shouldQuit()) {
 		if (_resetGameMode) {
-			if (!_sound->_loopingAudioName.empty())
-				_sound->playVoc(_sound->_loopingAudioName);
+			if (_pendingRestart) {
+				_pendingRestart = false;
+				restartGame();
+			}
+			if (_pendingLoadSlot != -1) {
+				int slot = _pendingLoadSlot;
+				_pendingLoadSlot = -1;
+				if (!loadGame(slot))
+					GUIErrorMessage(Common::U32String::format(_("Failed to load saved game from file:\n\n%s"), getSavegameFilename(slot).c_str()));
+			}
 			_resetGameMode = false;
 		}
 		TrekEvent event;
@@ -230,7 +409,7 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 			switch (_gameMode) {
 			case GAMEMODE_BRIDGE:
 				_sound->loadMusicFile("bridge");
-				initBridge(false);	// TODO: param
+				initBridge(true);
 				break;
 
 			case GAMEMODE_AWAYMISSION:
@@ -245,9 +424,10 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 				continue; // Back to start of loop
 
 			case GAMEMODE_BEAMUP:
+				// Also removes the icons of an unfinished use action
+				unloadRoom();
 				runTransportSequence("teleb");
 				_gameMode = GAMEMODE_BRIDGE;
-				delete _room;
 				//sub_15c61();
 				_sound->stopAllVocSounds();
 				_sound->playVoc("bridloop");
@@ -257,6 +437,8 @@ Common::Error StarTrekEngine::runGameMode(int mode, bool resume) {
 				break;
 			}
 		}
+
+		setAwayMissionKeymap(_gameMode == GAMEMODE_AWAYMISSION);
 
 		// Run current game mode
 		switch (_gameMode) {
@@ -389,7 +571,7 @@ void StarTrekEngine::playMovieMac(Common::String filename) {
 
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event))
-			if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
+			if (event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_LBUTTONDOWN)
 				continuePlaying = false;
 
 		_system->delayMillis(10);
@@ -398,6 +580,72 @@ void StarTrekEngine::playMovieMac(Common::String filename) {
 	delete qtDecoder;
 
 	// Swap back to 8bpp mode
+	initGraphics(SCREEN_WIDTH, SCREEN_HEIGHT);
+}
+
+void StarTrekEngine::pauseEngineIntern(bool pause) {
+	Engine::pauseEngineIntern(pause);
+	if (_sound)
+		_sound->pauseMidi(pause);
+
+	// The ticks and the recorded input of the DOS demo continue after the pause
+	if (pause) {
+		_pauseStartMillis = _system->getMillis();
+	} else {
+		uint32 pauseTime = _system->getMillis() - _pauseStartMillis;
+		_frameStartMillis += pauseTime;
+		_demoPlaybackStartMillis += pauseTime;
+	}
+}
+
+void StarTrekEngine::syncSoundSettings() {
+	Engine::syncSoundSettings();
+	if (_sound)
+		_sound->syncSoundSettings();
+}
+
+void StarTrekEngine::showMacLogo(uint32 ticks) {
+	const char *appName;
+	if (isMacDemo())
+		appName = "Star Trek\xc2\xae Demo";
+	else if (getFeatures() & GF_CDROM)
+		appName = "Star Trek\xc2\xae Enhanced CD-ROM";
+	else
+		appName = "Star Trek\xc2\xae";
+
+	Common::MacResManager appFork;
+	Common::SeekableReadStream *stream = nullptr;
+	if (appFork.open(Common::Path(appName)))
+		stream = appFork.getResource(MKTAG('P', 'I', 'C', 'T'), 128);
+	if (!stream) {
+		warning("Could not load the logo of '%s'", appName);
+		return;
+	}
+
+	Image::PICTDecoder pict;
+	bool loaded = pict.loadStream(*stream);
+	delete stream;
+	if (!loaded || pict.getSurface()->format.bytesPerPixel != 1)
+		return;
+
+	const ::Graphics::Surface *logo = pict.getSurface();
+	initGraphics(512, 384);
+	_system->getPaletteManager()->setPalette(pict.getPalette());
+	_system->fillScreen(pict.getPalette().findBestColor(0, 0, 0));
+	_system->copyRectToScreen(logo->getPixels(), logo->pitch, (512 - logo->w) / 2, (384 - logo->h) / 2, logo->w, logo->h);
+	_system->updateScreen();
+
+	const uint32 endTime = _system->getMillis() + ticks * 50;
+	bool skip = false;
+	while (!skip && !shouldQuit() && _system->getMillis() < endTime) {
+		Common::Event event;
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_LBUTTONDOWN)
+				skip = true;
+		}
+		_system->delayMillis(10);
+	}
+
 	initGraphics(SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 

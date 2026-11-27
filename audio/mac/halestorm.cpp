@@ -236,6 +236,7 @@ private:
 		uint8 program;
 		int32 ticker;
 		const uint8 *curPos;
+		uint8 curCmd;
 	};
 
 	bool parseEvent(HSSong &song, TrackState *s);
@@ -243,7 +244,6 @@ private:
 
 	uint8 _partVolume[16];
 	uint8 _partPrograms[16];
-	uint8 _curCmd;
 
 	ShStBuffer _data;
 	Common::Array<ShStBuffer> _tracks;
@@ -685,7 +685,7 @@ void HSSong::updateTempo() {
 	_internalTempo = _scan ? 32767 : ((_ticksPerSecond << 6) / _tempo);
 }
 
-HSMidiParser::HSMidiParser(HSLowLevelDriver *driver) : _driver(driver), _trackState(nullptr), _tracks(), _data(), _curCmd(0) {
+HSMidiParser::HSMidiParser(HSLowLevelDriver *driver) : _driver(driver), _trackState(nullptr), _tracks(), _data() {
 	_trackState = new TrackState[24]();
 	memset(_partPrograms, 0, sizeof(_partPrograms));
 	memset(_partVolume, 0, sizeof(_partVolume));
@@ -752,6 +752,7 @@ bool HSMidiParser::loadTracks(HSSong &song) {
 		_trackState[ch].status = 'F';
 		_trackState[ch].ticker = 0;
 		_trackState[ch].program = prg++;
+		_trackState[ch].curCmd = 0;
 	}
 
 	return true;
@@ -843,7 +844,8 @@ bool HSMidiParser::parseEvent(HSSong &song, TrackState *s) {
 		if (s->curPos <= s->data->ptr)
 			error("HSMidiParser::parseEvent(): Data error");
 		s->curPos--;
-		in = _curCmd;
+		// The running status belongs to the track
+		in = s->curCmd;
 	} else if (in == 0xff) {
 		uint evt = *s->curPos++;
 		if (evt == 0x2f) {
@@ -857,7 +859,7 @@ bool HSMidiParser::parseEvent(HSSong &song, TrackState *s) {
 		return true;
 	}
 
-	_curCmd = in;
+	s->curCmd = in;
 	uint8 evt = in & 0xf0;
 	uint8 chan = in & 0x0f;
 	uint8 arg1 = *s->curPos++;
@@ -1513,7 +1515,7 @@ void HSLowLevelDriver::pcmUpdateChannel(HSSoundChannel &chan) {
 			}
 		}
 
-		if (next == 1 || (int)chan.tickDataLen < (chan.dataEnd - src)) {
+		if (next == 1 || (next == 0 && (int)chan.tickDataLen < (chan.dataEnd - src))) {
 			if (!(rate & 0xffff) || chan.imode == kNone) {
 				if (chan.stateCur.velocity) {
 					HS_DOCYCLE(HS_CYCL_DEF((_transCycleLenDef + 1) * 5), at[*src], HS_VOID)
@@ -2651,13 +2653,13 @@ bool HSVolumeScaler::process(const ShStBuffer &src, uint8 *dst, uint16 para1, ui
 	uint32 len = src.len - copySndHeader(s, dst);
 
 	for (uint32 i = 0; i < len; ++i) {
-		int16 a = (int16)*s++;
-		a = (a - 128) * para1;
-		if (a > 0)
-			a += (para2 << 1);
+		int32 a = ((int32)*s++ - 128) * para1;
+		// Rounded to the nearest value, so that silence stays silent
+		if (a >= 0)
+			a += (para2 >> 1);
 		else
-			a -= (para2 << 1);
-		a = CLIP<int16>(a / para2, -128, 127) + 128;
+			a -= (para2 >> 1);
+		a = CLIP<int32>(a / para2, -128, 127) + 128;
 		*dst++ = (a & 0xff);
 	}
 

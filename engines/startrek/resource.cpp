@@ -22,6 +22,7 @@
 
 #include "common/file.h"
 #include "common/macresman.h"
+#include "common/ptr.h"
 
 #include "engines/util.h"
 #include "video/qt_decoder.h"
@@ -29,10 +30,12 @@
 #include "startrek/iwfile.h"
 #include "startrek/lzss.h"
 #include "startrek/resource.h"
+#include "startrek/text.h"
 
 namespace StarTrek {
 
-Resource::Resource(Common::Platform platform, bool isDemo) : _platform(platform), _isDemo(isDemo), _macResFork(nullptr) {
+Resource::Resource(Common::Platform platform, bool isDemo) : _platform(platform), _isDemo(isDemo), _macResFork(nullptr),
+	_language(Common::EN_ANY), _fixTexts(false), _macCDTexts(false) {
 	if (_platform == Common::kPlatformMacintosh) {
 		_macResFork = new Common::MacResManager();
 		if (!_macResFork->open("Star Trek Data"))
@@ -94,6 +97,32 @@ ResourceIndex Resource::getIndex(Common::String filename) {
 	return index;
 }
 
+// The offsets of the index and of the runs have 24 bits
+static uint32 readUint24(Common::SeekableReadStream *stream, bool bigEndian) {
+	byte bytes[3];
+	if (stream->read(bytes, sizeof(bytes)) != sizeof(bytes))
+		error("Incomplete resource offset");
+	return bigEndian ? READ_BE_UINT24(bytes) : READ_LE_UINT24(bytes);
+}
+
+// The lengths in the runs have 16 bits
+static uint16 readUint16(Common::SeekableReadStream *stream, bool bigEndian) {
+	byte bytes[2];
+	if (stream->read(bytes, sizeof(bytes)) != sizeof(bytes))
+		error("Incomplete resource length");
+	return bigEndian ? READ_BE_UINT16(bytes) : READ_LE_UINT16(bytes);
+}
+
+// Unlike readStream(), this also accepts empty records
+static Common::SeekableReadStream *readPayload(Common::SeekableReadStream *stream, uint32 size, const Common::String &filename) {
+	if (size > (uint64)(stream->size() - stream->pos()))
+		error("Incomplete resource %s", filename.c_str());
+	byte *data = (byte *)malloc(MAX<uint32>(size, 1));
+	if (stream->read(data, size) != size)
+		error("Incomplete resource %s", filename.c_str());
+	return new Common::MemoryReadStream(data, size, DisposeAfterUse::YES);
+}
+
 ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
 	ResourceIndex index;
 
@@ -131,10 +160,7 @@ ResourceIndex Resource::getIndexEntry(Common::SeekableReadStream *indexFile) {
 		index.indexOffset = indexFile->readUint32LE();
 		index.uncompressedSize = indexFile->readUint16LE();
 	} else {
-		if (_platform == Common::kPlatformAmiga)
-			index.indexOffset = (indexFile->readByte() << 16) + (indexFile->readByte() << 8) + indexFile->readByte();
-		else
-			index.indexOffset = indexFile->readByte() + (indexFile->readByte() << 8) + (indexFile->readByte() << 16);
+		index.indexOffset = readUint24(indexFile, _platform == Common::kPlatformAmiga);
 
 		if (index.indexOffset & (1 << 23)) {
 			index.fileCount = (index.indexOffset >> 16) & 0x7F;
@@ -178,8 +204,7 @@ uint32 Resource::getSequentialFileOffset(uint32 offset, int fileIndex) {
 	Common::SeekableReadStream *dataRunFile;
 
 	if (_platform == Common::kPlatformAmiga) {
-		// TODO: Amiga version
-		dataRunFile = nullptr;
+		dataRunFile = SearchMan.createReadStreamForMember("data000.run");
 	} else if (_platform == Common::kPlatformMacintosh) {
 		dataRunFile = _macResFork->getResource("Runs");
 	} else {
@@ -189,14 +214,14 @@ uint32 Resource::getSequentialFileOffset(uint32 offset, int fileIndex) {
 	if (!dataRunFile)
 		error("Could not open sequential file");
 
-	dataRunFile->seek(offset);
+	if (!dataRunFile->seek(offset))
+		error("Could not seek to the run at %d", offset);
 
-	offset = dataRunFile->readByte() + (dataRunFile->readByte() << 8) + (dataRunFile->readByte() << 16);
-	//offset &= 0xFFFFFE;
+	bool bigEndian = _platform == Common::kPlatformAmiga;
+	offset = readUint24(dataRunFile, bigEndian);
 
-	for (uint16 i = 0; i < fileIndex; i++) {
-		offset += dataRunFile->readUint16LE();
-	}
+	for (uint16 i = 0; i < fileIndex; i++)
+		offset += readUint16(dataRunFile, bigEndian);
 
 	delete dataRunFile;
 
@@ -254,15 +279,20 @@ Common::MemoryReadStreamEndian *Resource::loadFile(Common::String filename, int 
 
 	if (index.fileCount != 1)
 		index.indexOffset = getSequentialFileOffset(index.indexOffset, fileIndex);
-	dataFile->seek(index.indexOffset);
+	// Only an empty demo record may start at the end of the file
+	bool emptyDemoRecord = _isDemo && _platform == Common::kPlatformDOS && index.uncompressedSize == 0;
+	int64 offset = index.indexOffset;
+	if (offset > dataFile->size() || (offset == dataFile->size() && !emptyDemoRecord) || !dataFile->seek(offset))
+		error("Resource %s is outside of the data file", filename.c_str());
 
 	Common::SeekableReadStream *stream;
 	if (_isDemo && _platform == Common::kPlatformDOS) {
-		stream = dataFile->readStream(index.uncompressedSize);
+		stream = readPayload(dataFile, index.uncompressedSize, filename);
 	} else {
-		uint16 uncompressedSize = bigEndian ? dataFile->readUint16BE() : dataFile->readUint16LE();
-		uint16   compressedSize = bigEndian ? dataFile->readUint16BE() : dataFile->readUint16LE();
-		stream = decodeLZSS(dataFile->readStream(compressedSize), uncompressedSize);
+		uint16 uncompressedSize = readUint16(dataFile, bigEndian);
+		uint16 compressedSize = readUint16(dataFile, bigEndian);
+		Common::ScopedPtr<Common::SeekableReadStream> compressed(readPayload(dataFile, compressedSize, filename));
+		stream = decodeLZSS(compressed.get(), uncompressedSize);
 	}
 
 	delete dataFile;
@@ -283,8 +313,24 @@ Common::MemoryReadStreamEndian *Resource::loadFileWithParams(Common::String file
 	return loadFile(filename);
 }
 
+// The Mac CD version has no texts that only the floppy versions show, and the
+// rating of the trial comes first
+int Resource::getMacCDTextIndex(int textIndex) const {
+	if (_txtFilename.equalsIgnoreCase("demon") && textIndex > 3)
+		return textIndex - 1;
+	if (_txtFilename.equalsIgnoreCase("tug") && textIndex > 38)
+		return textIndex - 1;
+	if (_txtFilename.equalsIgnoreCase("mudd") && textIndex > 40)
+		return textIndex - 2;
+	if (_txtFilename.equalsIgnoreCase("trial") && textIndex <= 26)
+		return textIndex == 26 ? 0 : textIndex + 1;
+	return textIndex;
+}
+
 Common::String Resource::getLoadedText(int textIndex) {
 	Common::MemoryReadStreamEndian *txtFile = loadFile(_txtFilename + ".txt");
+	if (_macCDTexts)
+		textIndex = getMacCDTextIndex(textIndex);
 
 	Common::String str;
 	byte cur;
@@ -299,7 +345,7 @@ Common::String Resource::getLoadedText(int textIndex) {
 
 		if (curIndex == textIndex) {
 			delete txtFile;
-			return str;
+			return patchText(str.c_str(), _language, _fixTexts);
 		}
 
 		curIndex++;

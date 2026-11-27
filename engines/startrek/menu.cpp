@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/events.h"
 #include "common/stream.h"
 #include "graphics/cursorman.h"
@@ -200,7 +201,7 @@ void StarTrekEngine::showOptionsMenu(int x, int y) {
 	} else
 		disabledButtons |= (1 << OPTIONBUTTON_ENABLEMUSIC) | (1 << OPTIONBUTTON_DISABLEMUSIC);
 
-	if (_sfxWorking) {
+	if (_sound->canToggleSfx()) {
 		if (_sfxEnabled)
 			disabledButtons |= (1 << OPTIONBUTTON_ENABLESFX);
 		else
@@ -228,7 +229,6 @@ void StarTrekEngine::showOptionsMenu(int x, int y) {
 		break;
 	case 1: // Load
 		showLoadMenu();
-		_resetGameMode = true;
 		break;
 	case 2: // Enable music
 		_sound->setMusicEnabled(true);
@@ -256,6 +256,8 @@ void StarTrekEngine::showOptionsMenu(int x, int y) {
 void StarTrekEngine::showBridgeMenu(Common::String menu, int x, int y) {
 	bool tmpMouseControllingShip = _mouseControllingShip;
 	_mouseControllingShip = false;
+	_gfx->setMouseBitmap("pushbtn");
+	_sound->playSoundEffectIndex(kSfxBridgeMenu);
 
 	Common::Point oldMousePos = _gfx->getMousePos();
 	loadMenuButtons(menu, x, y);
@@ -265,6 +267,7 @@ void StarTrekEngine::showBridgeMenu(Common::String menu, int x, int y) {
 
 	unloadMenuButtons();
 	_mouseControllingShip = tmpMouseControllingShip;
+	_gfx->popMouseBitmap();
 
 	if (event != MENUEVENT_LCLICK_OFFBUTTON && event != MENUEVENT_RCLICK_OFFBUTTON)
 		_gfx->warpMouse(oldMousePos.x, oldMousePos.y);
@@ -343,7 +346,7 @@ int StarTrekEngine::showActionMenu() {
 	menuSprite.drawPriority2 = 8;
 	bool displayMenu = true;
 
-	while (displayMenu) {
+	while (displayMenu && !shouldQuit()) {
 		_sound->checkLoopMusic();
 
 		if (!popNextEvent(&event))
@@ -456,6 +459,8 @@ int StarTrekEngine::showActionMenu() {
 	if (action == ACTION_OPTIONS) {
 		showOptionsMenu(50, 50);
 		action = ACTION_WALK;
+		// The click chose the options, so Kirk doesn't walk there
+		addEventBack = false;
 	}
 
 	Common::Point mouse = _gfx->getMousePos();
@@ -613,9 +618,11 @@ int StarTrekEngine::mouseMoveEvent() {
 
 	Common::String bitmapName;
 	Common::Point lockMousePoint(-1, -1);
+	bool isDemo = getFeatures() & GF_DEMO;
 
-	// Check if the mouse is hovering over one of the selectable actions
-	if (relMouse.x >= 39 && relMouse.x <= 50 && relMouse.y >= 2 && relMouse.y <= 17) {
+	// Check if the mouse is hovering over one of the selectable actions.
+	// The DOS demo has no options.
+	if (relMouse.x >= 39 && relMouse.x <= 50 && relMouse.y >= 2 && relMouse.y <= 17 && !isDemo) {
 		action = ACTION_OPTIONS;
 		bitmapName = "options";
 		lockMousePoint = Common::Point(pos.x + 44, pos.y + 2);
@@ -634,10 +641,10 @@ int StarTrekEngine::mouseMoveEvent() {
 	} else if (relMouse.x >= 40 && relMouse.x <= 53 && relMouse.y >= 34 && relMouse.y <= 43) {
 		action = ACTION_GET;
 		bitmapName = "get";
-		lockMousePoint = Common::Point(pos.x + 44, pos.y + 38);
+		lockMousePoint = isDemo ? Common::Point(pos.x + 42, pos.y + 36) : Common::Point(pos.x + 44, pos.y + 38);
 	} else {
 		action = ACTION_WALK;
-		bitmapName = "walk";
+		bitmapName = isDemo ? "cursor" : "walk";
 	}
 
 	_gfx->setMouseBitmap(bitmapName);
@@ -654,6 +661,9 @@ int StarTrekEngine::handleMenuEvents(uint32 ticksUntilClickingEnabled, bool inTe
 	uint32 tickWhenClickingEnabled = _clockTicks + ticksUntilClickingEnabled;
 
 	while (true) {
+		if (_resetGameMode || shouldQuit())
+			return inTextbox ? TEXTBUTTON_CONFIRM : MENUEVENT_RCLICK_OFFBUTTON;
+
 		TrekEvent event;
 		while (popNextEvent(&event)) {
 			switch (event.type) {
@@ -905,8 +915,12 @@ void StarTrekEngine::chooseMouseBitmapForAction(int action, bool withRedOutline)
 		"lookh3"
 	};
 
-	if (getFeatures() & GF_DEMO)
+	// The DOS demo has one cursor for each action
+	if (getFeatures() & GF_DEMO) {
+		static const char *const demoBitmaps[] = { "cursor", "use", "get", "look", "talk" };
+		_gfx->setMouseBitmap(action >= ACTION_WALK && action <= ACTION_TALK ? demoBitmaps[action - ACTION_WALK] : "cursor");
 		return;
+	}
 
 	Common::String bitmapName;
 
@@ -959,12 +973,19 @@ void StarTrekEngine::chooseMouseBitmapForAction(int action, bool withRedOutline)
 }
 
 void StarTrekEngine::showQuitGamePrompt(int x, int y) {
-	const char *options[] = {
+	const char *gameOptions[] = {
 		"Quit Game",
 		"#GENE\\GENER028#Yes, quit the game.",
 		"#GENE\\GENER008#No, do not quit the game.",
 		""
 	};
+	const char *demoOptions[] = {
+		"Quit Demo",
+		"Yes, quit the demo.",
+		"No, do not quit the demo.",
+		""
+	};
+	const char **options = isMacDemo() ? demoOptions : gameOptions;
 
 	if (_inQuitGameMenu)
 		return;
@@ -980,28 +1001,43 @@ void StarTrekEngine::showQuitGamePrompt(int x, int y) {
 }
 
 void StarTrekEngine::showGameOverMenu() {
-	const char *options[] = {
+	const char *gameOptions[] = {
 		"Game Over",
 		"#GENE\\GENER006#Load a previously saved game.",
 		"#GENE\\GENER020#Restart the game.",
 		"#GENE\\GENER018#Quit the game.",
 		""
 	};
+	// The Mac demo can only be restarted or quit
+	const char *demoOptions[] = {
+		"Demo Over",
+		"Restart the demo.",
+		"Quit the demo.",
+		""
+	};
+	const char **options = isMacDemo() ? demoOptions : gameOptions;
 
-	while (true) {
+	// The game is already being left
+	if (_resetGameMode)
+		return;
+
+	while (!shouldQuit()) {
 		_inQuitGameMenu = true;
 		int selected = showText(&StarTrekEngine::readTextFromArray, (uintptr)options, 20, 20, TEXTCOLOR_YELLOW, true, false, true);
 		_inQuitGameMenu = false;
+		if (isMacDemo() && selected >= 0)
+			selected++;
 
 		switch (selected) {
 		case 0: // Load game
-			_gfx->fadeoutScreen();
-			showLoadMenu(); // TODO: this probably manipulates the stack to jump out of this function...
-			_resetGameMode = true;
-			return;
+			if (showLoadMenu()) {
+				_gfx->fadeoutScreen();
+				return;
+			}
+			break;
 		case 1: // Restart
 			_gfx->fadeoutScreen();
-			// TODO
+			_pendingRestart = true;
 			_resetGameMode = true;
 			return;
 		case 2: // Quit
@@ -1014,8 +1050,21 @@ void StarTrekEngine::showGameOverMenu() {
 	}
 }
 
+void StarTrekEngine::showTurboliftBlockedText(int area) {
+	// Only the CD versions have these texts
+	if (isFloppyVersion())
+		return;
+
+	Common::String text;
+	if (area == 6)
+		text = "#GENE\\GENE_F14#Turbolift access is blocked by an extremely high radiation level.";
+	else
+		text = "#GENE\\GENE_F15#This Turbolift cannot reach that area of the ship.";
+	showTextbox("Mr. Spock", text, 50, 50, TEXTCOLOR_YELLOW, 0); // ENHANCEMENT: Speaker is Spock
+}
+
 void StarTrekEngine::showTextConfigurationMenu(bool fromOptionMenu) {
-	const char *options[] = { // TODO: languages...
+	const char *options[] = {
 		"Text display",
 		"Text subtitles.",
 		"Display text until you press enter.",
@@ -1023,8 +1072,8 @@ void StarTrekEngine::showTextConfigurationMenu(bool fromOptionMenu) {
 		""
 	};
 
-	int val;
-	if (fromOptionMenu || (val = loadTextDisplayMode()) == -1) {
+	int val = fromOptionMenu ? -1 : loadTextDisplayMode();
+	if (val == -1) {
 		val = showText(&StarTrekEngine::readTextFromArray, (uintptr)options, 20, 30, TEXTCOLOR_YELLOW, true, 0, true);
 		saveTextDisplayMode(val);
 	}
@@ -1044,11 +1093,18 @@ void StarTrekEngine::showTextConfigurationMenu(bool fromOptionMenu) {
 	}
 }
 
+// The original stores this in INTRPLAY.CFG
 int StarTrekEngine::loadTextDisplayMode() {
-	return -1; // TODO
+	if (!ConfMan.hasKey("text_display_mode"))
+		return -1;
+	return ConfMan.getInt("text_display_mode");
 }
+
 void StarTrekEngine::saveTextDisplayMode(int value) {
-	// TODO;
+	if (value < 0)
+		return;
+	ConfMan.setInt("text_display_mode", value);
+	ConfMan.flushToDisk();
 }
 
 void StarTrekEngine::showRepublicMap(int16 arg0, int16 turbolift) {
@@ -1074,7 +1130,7 @@ void StarTrekEngine::showRepublicMap(int16 arg0, int16 turbolift) {
 		bool exitLoop = 0;
 		int16 var54 = 0x2d;
 
-		while (!exitLoop) {
+		while (!exitLoop && !shouldQuit()) {
 			TrekEvent event;
 			if (!popNextEvent(&event))
 				continue;
@@ -1132,7 +1188,7 @@ void StarTrekEngine::showRepublicMap(int16 arg0, int16 turbolift) {
 
 	bool exitLoop = false;
 
-	while (!exitLoop) {
+	while (!exitLoop && !shouldQuit()) {
 		TrekEvent event;
 		if (!popNextEvent(&event))
 			continue;
@@ -1140,19 +1196,15 @@ void StarTrekEngine::showRepublicMap(int16 arg0, int16 turbolift) {
 		switch (event.type) {
 		case TREKEVENT_TICK:
 			_frameIndex++;
-			// sub_12fff(); // TODO
+			cycleBridgeColors();
 			_gfx->drawAllSprites();
 			break;
 
 		case TREKEVENT_LBUTTONDOWN:
 			clickedArea = getRepublicMapAreaOrFailure(turbolift);
 			if (clickedArea == 0) {
-			} else if (clickedArea == 6) {
-				Common::String text = "#GENE\\GENE_F14#Turbolift access is blocked by an extremely high radiation level.";
-				showTextbox("Mr. Spock", text, 50, 50, TEXTCOLOR_YELLOW, 0); // ENHANCEMENT: Speaker is Spock
-			} else if (clickedArea == 7) {
-				Common::String text = "#GENE\\GENE_F15#This turbolift cannot reach that area of the ship.";
-				showTextbox("Mr. Spock", text, 50, 50, TEXTCOLOR_YELLOW, 0); // ENHANCEMENT: Speaker is Spock
+			} else if (clickedArea == 6 || clickedArea == 7) {
+				showTurboliftBlockedText(clickedArea);
 			} else
 				exitLoop = true;
 			break;
@@ -1190,12 +1242,8 @@ void StarTrekEngine::showRepublicMap(int16 arg0, int16 turbolift) {
 				// Same as TREKEVENT_LBUTTONDOWN
 				clickedArea = getRepublicMapAreaOrFailure(turbolift);
 				if (clickedArea == 0) {
-				} else if (clickedArea == 6) {
-					Common::String text = "#GENE\\GENE_F14#Turbolift access is blocked by an extremely high radiation level.";
-					showTextbox("Mr. Spock", text, 50, 50, TEXTCOLOR_YELLOW, 0); // ENHANCEMENT: Speaker is Spock
-				} else if (clickedArea == 7) {
-					Common::String text = "#GENE\\GENE_F15#This turbolift cannot reach that area of the ship.";
-					showTextbox("Mr. Spock", text, 50, 50, TEXTCOLOR_YELLOW, 0); // ENHANCEMENT: Speaker is Spock
+				} else if (clickedArea == 6 || clickedArea == 7) {
+					showTurboliftBlockedText(clickedArea);
 				} else
 					exitLoop = true;
 				break;

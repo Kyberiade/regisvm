@@ -32,7 +32,7 @@ namespace StarTrek {
 typedef int32 TextRef;
 
 // Text that's loaded from "GROUND.TXT". First 0x40 pieces of text are for items.
-// TODO: Floppy version has different numbers for this.
+// The floppy version has no texts for the items 0x40-0x48 (see getGroundText).
 enum GroundTextIDs {
 	// Generic "perform undefined action" text (ie. look at nothing, talk to wall)
 	GROUNDTX_LOOK_KIRK = 0x49,
@@ -66,7 +66,11 @@ enum GlobalGameStringIDs {
 	TX_EMPTY = -1
 };
 
-Common::String patchRoomMessage(const char *text);
+/**
+ * Corrects the texts: the speech files of the CD versions that are missing or wrong,
+ * and with the text fixes also the errors of the texts.
+ */
+Common::String patchText(const char *text, Common::Language language, bool fixTexts);
 
 struct RoomTextOffsets {
 	int16 id;
@@ -74,6 +78,11 @@ struct RoomTextOffsets {
 	uint16 offsetEnglishFloppy;
 	uint16 offsetFrenchCD;
 	uint16 offsetGermanCD;
+	uint16 offsetAmigaEnglish;
+	uint16 offsetAmigaGerman;
+	uint16 offsetAmigaFrench;
+	uint16 offsetMacFloppy;
+	uint16 offsetMacCD;
 };
 
 struct RoomText {

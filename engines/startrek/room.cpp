@@ -27,13 +27,7 @@
 
 #include "rooms/function_map.h"
 
-#define ADD_ROOM(ROOM) {                     \
-		if (name.equalsIgnoreCase(#ROOM)) {      \
-			_roomActionList = ROOM##ActionList;  \
-			_roomTextList = ROOM##TextOffsets;   \
-			_roomStaticTextList = ROOM##Texts;   \
-		}                                        \
-	}
+#define ROOM_TABLES(NAME, ROOM) { #NAME, ROOM##ActionList, ROOM##TextOffsets, ROOM##Texts }
 
 #define ADD_ROOM_COMMON(PREFIX) {                        \
 		if (name.hasPrefixIgnoreCase(#PREFIX)) {         \
@@ -44,6 +38,85 @@
 
 namespace StarTrek {
 
+// The action, text offset and static text tables of a room
+struct RoomTables {
+	const char *name;
+	const RoomAction *actions;
+	const RoomTextOffsets *textOffsets;
+	const RoomText *texts;
+};
+
+static const RoomTables kRooms[] = {
+	ROOM_TABLES(demon0, demon0),
+	ROOM_TABLES(demon1, demon1),
+	ROOM_TABLES(demon2, demon2),
+	ROOM_TABLES(demon3, demon3),
+	ROOM_TABLES(demon4, demon4),
+	ROOM_TABLES(demon5, demon5),
+	ROOM_TABLES(demon6, demon6),
+	ROOM_TABLES(tug0, tug0),
+	ROOM_TABLES(tug1, tug1),
+	ROOM_TABLES(tug2, tug2),
+	ROOM_TABLES(tug3, tug3),
+	ROOM_TABLES(love0, love0),
+	ROOM_TABLES(love1, love1),
+	ROOM_TABLES(love2, love2),
+	ROOM_TABLES(love3, love3),
+	ROOM_TABLES(love4, love4),
+	ROOM_TABLES(love5, love5),
+	ROOM_TABLES(mudd0, mudd0),
+	ROOM_TABLES(mudd1, mudd1),
+	ROOM_TABLES(mudd2, mudd2),
+	ROOM_TABLES(mudd3, mudd3),
+	ROOM_TABLES(mudd4, mudd4),
+	ROOM_TABLES(mudd5, mudd5),
+	ROOM_TABLES(feather0, feather0),
+	ROOM_TABLES(feather1, feather1),
+	ROOM_TABLES(feather2, feather2),
+	ROOM_TABLES(feather3, feather3),
+	ROOM_TABLES(feather4, feather4),
+	ROOM_TABLES(feather5, feather5),
+	ROOM_TABLES(feather6, feather6),
+	ROOM_TABLES(feather7, feather7),
+	ROOM_TABLES(trial0, trial0),
+	ROOM_TABLES(trial1, trial1),
+	ROOM_TABLES(trial2, trial2),
+	ROOM_TABLES(trial3, trial3),
+	ROOM_TABLES(trial4, trial4),
+	ROOM_TABLES(trial5, trial5),
+	ROOM_TABLES(sins0, sins0),
+	ROOM_TABLES(sins1, sins1),
+	ROOM_TABLES(sins2, sins2),
+	ROOM_TABLES(sins3, sins3),
+	ROOM_TABLES(sins4, sins4),
+	ROOM_TABLES(sins5, sins5),
+	ROOM_TABLES(veng0, veng0),
+	ROOM_TABLES(veng1, veng1),
+	ROOM_TABLES(veng2, veng2),
+	ROOM_TABLES(veng3, veng3),
+	ROOM_TABLES(veng4, veng4),
+	ROOM_TABLES(veng5, veng5),
+	ROOM_TABLES(veng6, veng6),
+	ROOM_TABLES(veng7, veng7),
+	ROOM_TABLES(veng8, veng8),
+	ROOM_TABLES(demo0, demo0),
+	ROOM_TABLES(demo1, demo1),
+};
+
+// The floppy version has a shorter Vengeance away mission
+static const RoomTables kFloppyRooms[] = {
+	ROOM_TABLES(veng0, vengf0),
+	ROOM_TABLES(veng1, vengf1),
+};
+
+static const RoomTables *findRoomTables(const RoomTables *rooms, int count, const Common::String &name) {
+	for (int i = 0; i < count; i++) {
+		if (name.equalsIgnoreCase(rooms[i].name))
+			return &rooms[i];
+	}
+	return nullptr;
+}
+
 Room::Room(StarTrekEngine *vm, const Common::String &name) : _vm(vm), _awayMission(&vm->_awayMission) {
 	_roomActionList = nullptr;
 	_roomTextList = nullptr;
@@ -51,60 +124,19 @@ Room::Room(StarTrekEngine *vm, const Common::String &name) : _vm(vm), _awayMissi
 	_roomStaticTextList = nullptr;
 	_commonTextRdf = "";
 
-	ADD_ROOM(demon0)
-	ADD_ROOM(demon1)
-	ADD_ROOM(demon2)
-	ADD_ROOM(demon3)
-	ADD_ROOM(demon4)
-	ADD_ROOM(demon5)
-	ADD_ROOM(demon6)
-	ADD_ROOM(tug0)
-	ADD_ROOM(tug1)
-	ADD_ROOM(tug2)
-	ADD_ROOM(tug3)
-	ADD_ROOM(love0)
-	ADD_ROOM(love1)
-	ADD_ROOM(love2)
-	ADD_ROOM(love3)
-	ADD_ROOM(love4)
-	ADD_ROOM(love5)
+	const RoomTables *tables = nullptr;
+	if (vm->isFloppyVersion())
+		tables = findRoomTables(kFloppyRooms, ARRAYSIZE(kFloppyRooms), name);
+	if (!tables)
+		tables = findRoomTables(kRooms, ARRAYSIZE(kRooms), name);
+	if (tables) {
+		_roomActionList = tables->actions;
+		_roomTextList = tables->textOffsets;
+		_roomStaticTextList = tables->texts;
+	}
+
 	ADD_ROOM_COMMON(love)
-	ADD_ROOM(mudd0)
-	ADD_ROOM(mudd1)
-	ADD_ROOM(mudd2)
-	ADD_ROOM(mudd3)
-	ADD_ROOM(mudd4)
-	ADD_ROOM(mudd5)
 	ADD_ROOM_COMMON(mudd)
-	ADD_ROOM(feather0)
-	ADD_ROOM(feather1)
-	ADD_ROOM(feather2)
-	ADD_ROOM(feather3)
-	ADD_ROOM(feather4)
-	ADD_ROOM(feather5)
-	ADD_ROOM(feather6)
-	ADD_ROOM(feather7)
-	ADD_ROOM(trial0)
-	ADD_ROOM(trial1)
-	ADD_ROOM(trial2)
-	ADD_ROOM(trial3)
-	ADD_ROOM(trial4)
-	ADD_ROOM(trial5)
-	ADD_ROOM(sins0)
-	ADD_ROOM(sins1)
-	ADD_ROOM(sins2)
-	ADD_ROOM(sins3)
-	ADD_ROOM(sins4)
-	ADD_ROOM(sins5)
-	ADD_ROOM(veng0)
-	ADD_ROOM(veng1)
-	ADD_ROOM(veng2)
-	ADD_ROOM(veng3)
-	ADD_ROOM(veng4)
-	ADD_ROOM(veng5)
-	ADD_ROOM(veng6)
-	ADD_ROOM(veng7)
-	ADD_ROOM(veng8)
 	ADD_ROOM_COMMON(veng)
 
 	if (_roomActionList == nullptr) {
@@ -135,7 +167,10 @@ byte *Room::loadRoomRDF(Common::String fileName) {
 }
 
 uint16 Room::readRdfWord(int offset) {
-	return READ_LE_UINT16((_rdfData + offset));
+	// The Amiga version has the data words in big endian
+	if (_vm->getPlatform() == Common::kPlatformAmiga)
+		return READ_BE_UINT16(_rdfData + offset);
+	return READ_LE_UINT16(_rdfData + offset);
 }
 
 bool Room::actionHasCode(const Action &action) {
@@ -201,9 +236,15 @@ Common::Point Room::getBeamInPosition(int crewmanIndex) {
 		int base = RDF_BEAM_IN_POSITIONS + crewmanIndex * 4;
 		return Common::Point(readRdfWord(base), readRdfWord(base + 2));
 	} else {
-		// TODO
-		return Common::Point(86, 158);
+		return getDemoCrewPosition(4, crewmanIndex);
 	}
+}
+
+// The crew of the DOS demo appears around one position of the room
+Common::Point Room::getDemoCrewPosition(int entryIndex, int crewmanIndex) {
+	static const int16 offsets[][2] = { { 0, 0 }, { -20, -10 }, { 20, -10 }, { 0, -20 } };
+	int base = RDF_ROOM_ENTRY_POSITIONS + entryIndex * 8;
+	return Common::Point(readRdfWord(base) + offsets[crewmanIndex][0], readRdfWord(base + 2) + offsets[crewmanIndex][1]);
 }
 
 Common::Point Room::getSpawnPosition(int crewmanIndex) {
@@ -332,36 +373,70 @@ const char *Room::getText(uint16 textId) {
 		index++;
 	} while (textList[index].id != -1);
 
-	// Check if we got a hardcoded text
+	// Check if we got a hardcoded text, preferably in the language of the game
 	index = 0;
 	if (offsets == nullptr && _roomStaticTextList != nullptr) {
+		const char *englishText = nullptr;
 		do {
-			if (_roomStaticTextList[index].id == textId) {
-				// TODO: Add non-English languages
-				return _roomStaticTextList[index].text;
+			const RoomText &roomText = _roomStaticTextList[index];
+			if (roomText.id == textId) {
+				if (roomText.language == _vm->getLanguage())
+					return roomText.text;
+				if (roomText.language == Common::EN_ANY)
+					englishText = roomText.text;
 			}
 			index++;
 		} while (_roomStaticTextList[index].id != -1);
+
+		if (englishText)
+			return englishText;
 	}
 
 	if (offsets == nullptr)
 		error("Missing text ID: %d", textId);
 
-	switch (_vm->getLanguage()) {
-	case Common::FR_FRA:
-		offset = offsets->offsetFrenchCD;
-		break;
-	case Common::DE_DEU:
-		offset = offsets->offsetGermanCD;
-		break;
-	default:
-		offset = isCD ? offsets->offsetEnglishCD : offsets->offsetEnglishFloppy;
-		break;
+	if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		switch (_vm->getLanguage()) {
+		case Common::FR_FRA:
+			offset = offsets->offsetAmigaFrench;
+			break;
+		case Common::DE_DEU:
+			offset = offsets->offsetAmigaGerman;
+			break;
+		default:
+			offset = offsets->offsetAmigaEnglish;
+			break;
+		}
+	} else if (_vm->getPlatform() == Common::kPlatformMacintosh) {
+		offset = isCD ? offsets->offsetMacCD : offsets->offsetMacFloppy;
+	} else {
+		switch (_vm->getLanguage()) {
+		case Common::FR_FRA:
+			offset = offsets->offsetFrenchCD;
+			break;
+		case Common::DE_DEU:
+			offset = offsets->offsetGermanCD;
+			break;
+		default:
+			offset = isCD ? offsets->offsetEnglishCD : offsets->offsetEnglishFloppy;
+			break;
+		}
+	}
+
+	// Some texts only exist in some versions of the game
+	if (offset == 0) {
+		warning("Text %d doesn't exist in this version", textId);
+		return nullptr;
 	}
 
 	const char *text = textId < 5000 ? (const char *)_rdfData + offset : (const char *)_commonRdfData + offset;
-	//return patchRoomMessage(text).c_str();	// TODO
-	return text;
+	if (!isCD && !_vm->textFixes())
+		return text;
+
+	// The corrected texts stay valid as long as the room, like the ones in the RDF file
+	if (!_patchedTexts.contains(textId))
+		_patchedTexts[textId] = patchText(text, _vm->getLanguage(), _vm->textFixes());
+	return _patchedTexts[textId].c_str();
 }
 
 int Room::showMultipleTexts(const TextRef *textIDs) {
@@ -374,6 +449,12 @@ int Room::showMultipleTexts(const TextRef *textIDs) {
 
 	for (int i = 0; i < numIDs; i++) {
 		text[i] = textIDs[i] == TX_EMPTY ? "" : getText(textIDs[i]);
+		if (!text[i] && i == 0) {
+			text[i] = "";
+		} else if (!text[i]) {
+			free(text);
+			return 0;
+		}
 	}
 
 	text[numIDs] = "";	// terminator
@@ -460,8 +541,9 @@ void Room::loadMapFile(const Common::String &name) {
 	delete _vm->_mapFile;
 	_vm->_mapFile = _vm->_resource->loadFile(name + ".map");
 
+	// The DOS demo has no paths around obstacles
 	delete _vm->_iwFile;
-	_vm->_iwFile = new IWFile(_vm, name + ".iw");
+	_vm->_iwFile = !(_vm->getFeatures() & GF_DEMO) ? new IWFile(_vm, name + ".iw") : nullptr;
 }
 
 Common::MemoryReadStreamEndian *Room::loadBitmapFile(Common::String baseName) {
@@ -518,7 +600,12 @@ void Room::playMidiMusicTracks(MidiTracks startTrack, MidiLoopType loopType) {
 	_vm->_sound->playMidiMusicTracks(startTrack, loopType);
 }
 
-void Room::endMission(int16 score, int16 arg1, int16 arg2) {
+// The away mission of the DOS demo ends without beaming up
+void Room::endDosDemoMission() {
+	_vm->_gameMode = GAMEMODE_START;
+}
+
+void Room::endMission(int16 score, int16 maxScore, int16 endFlag) {
 	_vm->_awayMission.disableInput = true;
 
 	for (int i = 0; i < (_vm->_awayMission.redshirtDead ? 3 : 4); i++) {
@@ -540,27 +627,14 @@ void Room::endMission(int16 score, int16 arg1, int16 arg2) {
 	_vm->_awayMission.disableInput = false;
 	_vm->_roomIndexToLoad = 0;
 	_vm->_gameMode = GAMEMODE_BEAMUP;
-
-	if (_vm->_missionName == "DEMON") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionDemon;
-	} else if (_vm->_missionName == "TUG") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionTug;
-	} else if (_vm->_missionName == "LOVE") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionLove;
-	} else if (_vm->_missionName == "MUDD") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionMudd;
-	} else if (_vm->_missionName == "FEATHER") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionFeather;
-	} else if (_vm->_missionName == "TRIAL") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionTrial;
-	} else if (_vm->_missionName == "SINS") {
-		_vm->_bridgeSequenceToLoad = kSeqEndMissionSins;
-	}
+	_vm->_missionScore = score;
+	_vm->_missionMaxScore = maxScore;
+	_vm->_missionEndFlag = endFlag;
+	_vm->_returnedFromAwayMission = true;
 }
 
-void Room::showGameOverMenu() { // TODO: takes an optional parameter?
+void Room::showGameOverMenu() {
 	_vm->showGameOverMenu();
-	// TODO: finish. Shouldn't do this within a room due to deletion of current room?
 }
 
 int Room::showCodeInputBox(const char * const *codes) {
@@ -629,22 +703,21 @@ void Room::mccoyScan(int direction, TextRef speaker, TextRef text, bool changeDi
 }
 
 bool Room::isPointInPolygon(int offset, int16 x, int16 y) {
-	int16 *data = (int16 *)(_rdfData + offset);
-	int16 numVertices = data[1];
-	int16 *vertData = &data[2];
+	int16 numVertices = readRdfWord(offset + 2);
+	int vertOffset = offset + 4;
 
 	for (int i = 0; i < numVertices; i++) {
-		Common::Point p1(vertData[0], vertData[1]);
+		Common::Point p1((int16)readRdfWord(vertOffset), (int16)readRdfWord(vertOffset + 2));
 		Common::Point p2;
 		if (i == numVertices - 1) // Loop to 1st vertex
-			p2 = Common::Point(data[2], data[3]);
+			p2 = Common::Point((int16)readRdfWord(offset + 4), (int16)readRdfWord(offset + 6));
 		else
-			p2 = Common::Point(vertData[2], vertData[3]);
+			p2 = Common::Point((int16)readRdfWord(vertOffset + 4), (int16)readRdfWord(vertOffset + 6));
 
 		if ((p2.x - p1.x) * (y - p1.y) - (p2.y - p1.y) * (x - p1.x) < 0)
 			return false;
 
-		vertData += 2;
+		vertOffset += 4;
 	}
 
 	return true;

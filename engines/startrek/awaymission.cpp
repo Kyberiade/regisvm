@@ -19,6 +19,10 @@
  *
  */
 
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/keymapper.h"
+#include "graphics/hotspot_renderer.h"
+
 #include "startrek/iwfile.h"
 #include "startrek/resource.h"
 #include "startrek/room.h"
@@ -31,10 +35,15 @@ void StarTrekEngine::initAwayMission() {
 
 	// memset(bitmapBuffer->pixels, 0, 0xfa00);
 
-	_resource->setTxtFileName("ground");
+	// The DOS demo has no default texts and no music in the away mission
+	if (!(getFeatures() & GF_DEMO)) {
+		_resource->setTxtFileName("ground");
 
-	// sub_23a60(); // TODO
-	_sound->loadMusicFile("ground");
+		// Each mission starts with the default equipment
+		for (int i = 0; i < NUM_ITEMS; i++)
+			_itemList[i].have = g_itemList[i].have;
+		_sound->loadMusicFile("ground");
+	}
 
 	loadRoom(_missionToLoad, _roomIndexToLoad);
 	_roomIndexToLoad = -1;
@@ -43,8 +52,15 @@ void StarTrekEngine::initAwayMission() {
 	initAwayCrewPositions(4);
 }
 
+// The floppy version has no texts for the items of the CD version's last mission
+Common::String StarTrekEngine::getGroundText(int textId) {
+	if (isFloppyVersion() && textId >= GROUNDTX_LOOK_KIRK)
+		textId -= GROUNDTX_LOOK_KIRK - 0x40;
+	return _resource->getLoadedText(textId);
+}
+
 void StarTrekEngine::runAwayMission() {
-	while (_gameMode == GAMEMODE_AWAYMISSION && !_resetGameMode) {
+	while (_gameMode == GAMEMODE_AWAYMISSION && !_resetGameMode && !shouldQuit()) {
 		// Original game manipulates the stack when the room changes to return execution
 		// to this point. Instead of doing that, just check if a variable is set.
 		if (_roomIndexToLoad != -1 && _spawnIndexToLoad != -1) {
@@ -61,8 +77,6 @@ void StarTrekEngine::runAwayMission() {
 
 		assert(_actionQueue.size() <= 16);
 		while (!_actionQueue.empty()) {
-			// sub_200e7(); // TODO
-			// sub_20118();
 			handleAwayMissionAction();
 		}
 	}
@@ -94,8 +108,7 @@ void StarTrekEngine::loadRoom(const Common::String &missionName, int roomIndex) 
 	// Original sets up bytes 0-3 of rdf file as "remote function caller"
 
 	bool isDemo = getFeatures() & GF_DEMO;
-	if (!isDemo)
-		_room->loadMapFile(getScreenName());
+	_room->loadMapFile(getScreenName());
 
 	_awayMission.activeAction = ACTION_WALK;
 
@@ -115,6 +128,8 @@ void StarTrekEngine::loadRoom(const Common::String &missionName, int roomIndex) 
 			loadBanFile(name);
 			addr += strlen((char *)&_room->_rdfData[addr]) + 1;
 		}
+	} else {
+		loadDemoRoomActors();
 	}
 }
 
@@ -128,6 +143,16 @@ void StarTrekEngine::initAwayCrewPositions(int warpEntryIndex) {
 	case 1:
 	case 2:
 	case 3:
+		// The crew of the DOS demo doesn't walk into the room
+		if (getFeatures() & GF_DEMO) {
+			for (int i = 0; i < 4; i++) {
+				Common::Point pos = _room->getDemoCrewPosition(warpEntryIndex, i);
+				loadActorAnimWithRoomScaling(i, getCrewmanAnimFilename(i, "stnde"), pos.x, pos.y);
+			}
+			_warpHotspotsActive = true;
+			break;
+		}
+
 		for (int i = 0; i < (_awayMission.redshirtDead ? 3 : 4); i++) {
 			Common::String anim = getCrewmanAnimFilename(i, "walk");
 
@@ -179,7 +204,7 @@ void StarTrekEngine::initAwayCrewPositions(int warpEntryIndex) {
 void StarTrekEngine::handleAwayMissionEvents() {
 	TrekEvent event;
 
-	if (popNextEvent(&event)) {
+	if (popMainLoopEvent(&event, !_awayMission.disableInput)) {
 		switch (event.type) {
 		case TREKEVENT_TICK:
 			updateActorAnimations();
@@ -212,6 +237,13 @@ void StarTrekEngine::handleAwayMissionEvents() {
 			break;
 
 		case TREKEVENT_KEYDOWN:
+			// The DOS demo only has the escape key, which ends the demo
+			if (getFeatures() & GF_DEMO) {
+				if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
+					quitGame();
+				break;
+			}
+
 			if (_awayMission.disableInput)
 				break;
 
@@ -281,27 +313,17 @@ void StarTrekEngine::handleAwayMissionEvents() {
 					handleBridgeComputer();
 				break;
 
-			case Common::KEYCODE_p:
-				// Pause game
-				// TODO
-				break;
-
-			case Common::KEYCODE_e:
-				if (event.kbd.flags & Common::KBD_CTRL) {
-					_sound->toggleSfx();
-				}
-				break;
-
-			case Common::KEYCODE_m:
-				if (event.kbd.flags & Common::KBD_CTRL) {
-					_sound->toggleMusic();
-				}
-				break;
-
 			case Common::KEYCODE_q:
 				if (event.kbd.flags & Common::KBD_CTRL) {
 					showQuitGamePrompt(20, 20);
 				}
+				break;
+
+			case Common::KEYCODE_F5:
+				if (originalSaveLoad())
+					showOptionsMenu(50, 50);
+				else
+					showScummVMMenu();
 				break;
 
 			default:
@@ -404,6 +426,17 @@ void StarTrekEngine::awayMissionSelectAction(bool openActionMenu) {
 		_awayMission.activeAction = showActionMenu();
 	}
 
+	// The DOS demo chooses the object from the inventory right away
+	if (_awayMission.activeAction == ACTION_USE && (getFeatures() & GF_DEMO)) {
+		int16 clickedObject = showInventoryMenu(50, 50, false);
+		if (clickedObject == -1)
+			_awayMission.activeAction = ACTION_WALK;
+		else
+			_awayMission.activeObject = clickedObject;
+		chooseMouseBitmapForAction(_awayMission.activeAction, false);
+		return;
+	}
+
 	if (_awayMission.activeAction == ACTION_USE) {
 		int16 clickedObject = selectObjectForUseAction();
 		if (clickedObject == -1)
@@ -426,6 +459,11 @@ void StarTrekEngine::awayMissionSelectAction(bool openActionMenu) {
 
 void StarTrekEngine::awayMissionUseObject(int16 clickedObject) {
 	_awayMission.passiveObject = clickedObject;
+
+	if (getFeatures() & GF_DEMO) {
+		addAction(ACTION_USE, _awayMission.activeObject, clickedObject < 0 ? 0xff : clickedObject, 0);
+		return;
+	}
 
 	bool activeIsCrewman = _awayMission.activeObject <= OBJECT_REDSHIRT;
 	bool activeIsItem = _awayMission.activeObject >= ITEMS_START && _awayMission.activeObject < ITEMS_END;
@@ -497,7 +535,7 @@ void StarTrekEngine::awayMissionGetLookOrTalk(int16 clickedObject) {
 
 void StarTrekEngine::unloadRoom() {
 	_gfx->fadeoutScreen();
-	// sub_2394b(); // TODO
+	hideInventoryIcons();
 	removeDrawnActorsFromScreen();
 	delete _room;
 	_room = nullptr;
@@ -560,6 +598,14 @@ void StarTrekEngine::handleAwayMissionAction() {
 	if (_room->handleAction(action))
 		return;
 
+	// The DOS demo only has default actions for walking and warping
+	if (getFeatures() & GF_DEMO) {
+		if (action.type == ACTION_USE)
+			_room->handleAction(ACTION_USE, action.b1, 0xff, 0);
+		if (action.type != ACTION_WALK && action.type != ACTION_TOUCHED_WARP)
+			return;
+	}
+
 	// Action not defined for the room, check for default behaviour
 
 	switch (action.type) {
@@ -579,7 +625,7 @@ void StarTrekEngine::handleAwayMissionAction() {
 				// BUGFIX: Don't allow the "use" action to bypass the "disableWalking" variable
 				if (!(!_awayMission.disableWalking && _room->handleAction(ACTION_WALK, action.passiveObject(), 0, 0))
 						&& !_room->handleAction(ACTION_GET, action.passiveObject(), 0, 0)) {
-					showTextbox("Capt. Kirk", _resource->getLoadedText(GROUNDTX_KIRK_USE), 20, 20, TEXTCOLOR_YELLOW, 0);
+					showTextbox("Capt. Kirk", getGroundText(GROUNDTX_KIRK_USE), 20, 20, TEXTCOLOR_YELLOW, 0);
 				}
 				break;
 
@@ -588,7 +634,7 @@ void StarTrekEngine::handleAwayMissionAction() {
 					// BUGFIX: Original game has just "Spock" instead of "Mr. Spock" as the
 					// speaker. That's inconsistent.
 					// Same applies to other parts of this function.
-					showTextbox("Mr. Spock", _resource->getLoadedText(GROUNDTX_SPOCK_USE), 20, 20, TEXTCOLOR_BLUE, 0);
+					showTextbox("Mr. Spock", getGroundText(GROUNDTX_SPOCK_USE), 20, 20, TEXTCOLOR_BLUE, 0);
 				}
 				break;
 
@@ -596,68 +642,70 @@ void StarTrekEngine::handleAwayMissionAction() {
 				if (!_room->handleAction(ACTION_USE, OBJECT_IMEDKIT, action.passiveObject(), 0)
 						&& !_room->handleAction(ACTION_USE, OBJECT_IMTRICOR, action.passiveObject(), 0)) {
 					// BUGFIX: Original game has just "McCoy" instead of "Dr. McCoy".
-					showTextbox("Dr. McCoy", _resource->getLoadedText(GROUNDTX_MCCOY_USE), 20, 20, TEXTCOLOR_BLUE, 0);
+					showTextbox("Dr. McCoy", getGroundText(GROUNDTX_MCCOY_USE), 20, 20, TEXTCOLOR_BLUE, 0);
 				}
 				break;
 
 			case OBJECT_REDSHIRT:
-				showTextbox(NULL, _resource->getLoadedText(GROUNDTX_REDSHIRT_USE), 20, 20, TEXTCOLOR_YELLOW, 0);
+				showTextbox(NULL, getGroundText(GROUNDTX_REDSHIRT_USE), 20, 20, TEXTCOLOR_YELLOW, 0);
 				break;
 
 			case OBJECT_IPHASERS:
 			case OBJECT_IPHASERK:
 				if (action.passiveObject() == OBJECT_SPOCK) {
 					int text = GROUNDTX_PHASER_ON_SPOCK + getRandomWord() % 8;
-					showTextbox("Mr. Spock", _resource->getLoadedText(text), 20, 20, TEXTCOLOR_BLUE, 0);
+					showTextbox("Mr. Spock", getGroundText(text), 20, 20, TEXTCOLOR_BLUE, 0);
 				} else if (action.passiveObject() == OBJECT_MCCOY) {
 					int text = GROUNDTX_PHASER_ON_MCCOY + getRandomWord() % 8;
-					showTextbox("Dr. McCoy", _resource->getLoadedText(text), 20, 20, TEXTCOLOR_BLUE, 0);
+					showTextbox("Dr. McCoy", getGroundText(text), 20, 20, TEXTCOLOR_BLUE, 0);
 				} else if (action.passiveObject() == OBJECT_REDSHIRT) {
-					Common::String text = _resource->getLoadedText(GROUNDTX_PHASER_ON_REDSHIRT + getRandomWord() % 8);
+					Common::String text = getGroundText(GROUNDTX_PHASER_ON_REDSHIRT + getRandomWord() % 8);
 					// Replace audio filename with start of mission name (to load the
 					// audio for the crewman specific to the mission))
-					text.setChar(_missionName[0], 6);
-					text.setChar(_missionName[1], 7);
-					text.setChar(_missionName[2], 8);
+					if (!isFloppyVersion()) {
+						text.setChar(_missionName[0], 6);
+						text.setChar(_missionName[1], 7);
+						text.setChar(_missionName[2], 8);
+					}
 					showTextbox("Security Officer", text, 20, 20, TEXTCOLOR_RED, 0);
 					// TODO: replace "Security Officer" string with their actual name as
 					// an enhancement?
 				} else if (!_room->handleActionWithBitmask(action)) {
 					int index = getRandomWord() % 7;
 					if (index & 1)
-						showTextbox("Dr. McCoy", _resource->getLoadedText(GROUNDTX_PHASER_ANYWHERE + index), 20, 20, TEXTCOLOR_BLUE, 0);
+						showTextbox("Dr. McCoy", getGroundText(GROUNDTX_PHASER_ANYWHERE + index), 20, 20, TEXTCOLOR_BLUE, 0);
 					else
-						showTextbox("Mr. Spock", _resource->getLoadedText(GROUNDTX_PHASER_ANYWHERE + index), 20, 20, TEXTCOLOR_BLUE, 0);
+						showTextbox("Mr. Spock", getGroundText(GROUNDTX_PHASER_ANYWHERE + index), 20, 20, TEXTCOLOR_BLUE, 0);
 				}
 				break;
 
 			case OBJECT_ISTRICOR:
-				showTextbox("Mr. Spock", _resource->getLoadedText(GROUNDTX_SPOCK_SCAN), 20, 20, TEXTCOLOR_BLUE, 0);
+				showTextbox("Mr. Spock", getGroundText(GROUNDTX_SPOCK_SCAN), 20, 20, TEXTCOLOR_BLUE, 0);
 				break;
 
 			case OBJECT_IMTRICOR:
-				showTextbox("Dr. McCoy", _resource->getLoadedText(GROUNDTX_MCCOY_SCAN), 20, 20, TEXTCOLOR_BLUE, 0);
+				showTextbox("Dr. McCoy", getGroundText(GROUNDTX_MCCOY_SCAN), 20, 20, TEXTCOLOR_BLUE, 0);
 				break;
 
 			case OBJECT_ICOMM:
 				if (!_room->handleAction(ACTION_USE, OBJECT_ICOMM, 0xff, 0))
-					showTextbox("Lt. Uhura", _resource->getLoadedText(GROUNDTX_USE_COMMUNICATOR), 20, 20, TEXTCOLOR_RED, 0);
+					showTextbox("Lt. Uhura", getGroundText(GROUNDTX_USE_COMMUNICATOR), 20, 20, TEXTCOLOR_RED, 0);
 				break;
 
 			case OBJECT_IMEDKIT:
-				showTextbox("Dr. McCoy", _resource->getLoadedText(GROUNDTX_USE_MEDKIT), 20, 20, TEXTCOLOR_BLUE, 0);
+				showTextbox("Dr. McCoy", getGroundText(GROUNDTX_USE_MEDKIT), 20, 20, TEXTCOLOR_BLUE, 0);
 				break;
 
 			default:
 				if (!_room->handleActionWithBitmask(action.type, action.b1, action.b2, action.b3))
-					showTextbox("", _resource->getLoadedText(GROUNDTX_NOTHING_HAPPENS), 20, 20, TEXTCOLOR_YELLOW, 0);
+					showTextbox("", getGroundText(GROUNDTX_NOTHING_HAPPENS), 20, 20, TEXTCOLOR_YELLOW, 0);
 			}
 		}
 		break;
 
 	case ACTION_GET:
 		if (!_room->handleActionWithBitmask(action.type, action.b1, action.b2, action.b3))
-			showTextbox("", _resource->getLoadedText(GROUNDTX_FAIL_TO_OBTAIN_ANYTHING), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_FAIL_TO_OBTAIN_ANYTHING), 20, 20, TEXTCOLOR_YELLOW, 0);
 		break;
 
 	case ACTION_LOOK:
@@ -666,19 +714,19 @@ void StarTrekEngine::handleAwayMissionAction() {
 			Common::String text = _resource->getLoadedText(_itemList[i].textIndex);
 			showTextbox("", text, 20, 20, TEXTCOLOR_YELLOW, 0);
 		} else if (action.activeObject() == OBJECT_KIRK)
-			showTextbox("", _resource->getLoadedText(GROUNDTX_LOOK_KIRK), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_LOOK_KIRK), 20, 20, TEXTCOLOR_YELLOW, 0);
 		else if (action.activeObject() == OBJECT_SPOCK)
-			showTextbox("", _resource->getLoadedText(GROUNDTX_LOOK_SPOCK), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_LOOK_SPOCK), 20, 20, TEXTCOLOR_YELLOW, 0);
 		else if (action.activeObject() == OBJECT_MCCOY)
-			showTextbox("", _resource->getLoadedText(GROUNDTX_LOOK_MCCOY), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_LOOK_MCCOY), 20, 20, TEXTCOLOR_YELLOW, 0);
 		else if (action.activeObject() == OBJECT_REDSHIRT)
-			showTextbox("", _resource->getLoadedText(GROUNDTX_LOOK_REDSHIRT), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_LOOK_REDSHIRT), 20, 20, TEXTCOLOR_YELLOW, 0);
 		else
 			// Show generic "nothing of note" text.
 			// BUGFIX: originally this was shown after the redshirt's text as well.
 			// Though, the original game may not have used this default implementation
 			// anywhere...
-			showTextbox("", _resource->getLoadedText(GROUNDTX_LOOK_ANYWHERE), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_LOOK_ANYWHERE), 20, 20, TEXTCOLOR_YELLOW, 0);
 		break;
 
 	case ACTION_TALK:
@@ -687,11 +735,11 @@ void StarTrekEngine::handleAwayMissionAction() {
 		case OBJECT_SPOCK:
 		case OBJECT_MCCOY:
 		case OBJECT_REDSHIRT:
-			showTextbox("", _resource->getLoadedText(GROUNDTX_TALK_TO_CREWMAN), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_TALK_TO_CREWMAN), 20, 20, TEXTCOLOR_YELLOW, 0);
 			break;
 
 		default:
-			showTextbox("", _resource->getLoadedText(GROUNDTX_NO_RESPONSE), 20, 20, TEXTCOLOR_YELLOW, 0);
+			showTextbox("", getGroundText(GROUNDTX_NO_RESPONSE), 20, 20, TEXTCOLOR_YELLOW, 0);
 			break;
 		}
 		break;
@@ -701,7 +749,8 @@ void StarTrekEngine::handleAwayMissionAction() {
 			byte warpIndex = action.b1;
 			int16 roomIndex = _room->readRdfWord(RDF_WARP_ROOM_INDICES + warpIndex * 2);
 			unloadRoom();
-			_sound->loadMusicFile("ground");
+			if (!(getFeatures() & GF_DEMO))
+				_sound->loadMusicFile("ground");
 			loadRoom(_missionName, roomIndex);
 			initAwayCrewPositions(warpIndex ^ 1);
 		}
@@ -769,6 +818,13 @@ bool StarTrekEngine::isPositionSolid(int16 x, int16 y) {
 }
 
 void StarTrekEngine::loadRoomIndex(int roomIndex, int spawnIndex) {
+	// The Mac demo ends when the first room is left
+	if (isMacDemo() && roomIndex != 0) {
+		showTextbox("", "Thank you for playing Star Trek 25th Anniversary!", 20, 20, TEXTCOLOR_YELLOW, 0);
+		showGameOverMenu();
+		return;
+	}
+
 	unloadRoom();
 	_sound->loadMusicFile("ground");
 
@@ -777,6 +833,64 @@ void StarTrekEngine::loadRoomIndex(int roomIndex, int spawnIndex) {
 
 	// WORKAROUND: original game calls "retrieveStackVars" to return execution directly to
 	// the top of "runAwayMission". That can't really be done here. But does it matter?
+}
+
+// The hotspot key of ScummVM is the key of Uhura on the bridge
+void StarTrekEngine::setAwayMissionKeymap(bool enable) {
+	Common::Keymap *keymap = _eventMan->getKeymapper()->getKeymap("startrek-away");
+	if (keymap)
+		keymap->setEnabled(enable);
+	if (!enable)
+		showHotspots(false);
+}
+
+// Returns the center of the bounding box of a polygon
+static Common::Point getPolygonCenter(Room *room, int offset) {
+	int numVertices = room->readRdfWord(offset + 2);
+	Common::Rect bounds;
+	for (int i = 0; i < numVertices; i++) {
+		int16 x = room->readRdfWord(offset + 4 + i * 4);
+		int16 y = room->readRdfWord(offset + 6 + i * 4);
+		if (i == 0)
+			bounds = Common::Rect(x, y, x, y);
+		else
+			bounds.extend(Common::Rect(x, y, x, y));
+	}
+	return bounds.center();
+}
+
+void StarTrekEngine::getHotspotPositions(Common::Array< ::Graphics::HotspotInfo> &hotspots) {
+	if (_gameMode != GAMEMODE_AWAYMISSION || !_room)
+		return;
+
+	// The actors of the room, without the crew
+	for (int i = OBJECT_REDSHIRT + 1; i < NUM_ACTORS; i++) {
+		const Sprite &sprite = _actorList[i].sprite;
+		if (_actorList[i].spriteDrawn && sprite.drawMode != 1 && !sprite.drawRect.isEmpty())
+			hotspots.push_back(::Graphics::HotspotInfo(sprite.drawRect.center(), Common::U32String(), ::Graphics::kHotspotObject));
+	}
+
+	// The objects of the room, the ones only for walking are exits
+	int offset = _room->getFirstHotspot();
+	while (offset != _room->getHotspotEnd()) {
+		uint16 word = _room->readRdfWord(offset);
+		::Graphics::HotspotType type = ::Graphics::kHotspotObject;
+		if (word & 0x8000) {
+			if ((word & 0x1f) == (1 << (ACTION_WALK - 1)))
+				type = ::Graphics::kHotspotExit;
+			offset += 6;
+		}
+		hotspots.push_back(::Graphics::HotspotInfo(getPolygonCenter(_room, offset), Common::U32String(), type));
+		offset += 4 + _room->readRdfWord(offset + 2) * 4;
+	}
+
+	// The doors and the other exits
+	for (offset = _room->getFirstDoorPolygonOffset(); offset != _room->getDoorPolygonEndOffset(); offset += 4 + _room->readRdfWord(offset + 2) * 4)
+		hotspots.push_back(::Graphics::HotspotInfo(getPolygonCenter(_room, offset), Common::U32String(), ::Graphics::kHotspotExit));
+	if (_warpHotspotsActive) {
+		for (offset = _room->getFirstWarpPolygonOffset(); offset != _room->getWarpPolygonEndOffset(); offset += 4 + _room->readRdfWord(offset + 2) * 4)
+			hotspots.push_back(::Graphics::HotspotInfo(getPolygonCenter(_room, offset), Common::U32String(), ::Graphics::kHotspotExit));
+	}
 }
 
 } // End of namespace StarTrek

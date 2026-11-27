@@ -88,55 +88,56 @@ enum tug3TextIds {
 	TX_COMPU181, TX_COMPU182, TX_TUG3_012
 };
 
-// TODO: Finish floppy offsets
 extern const RoomTextOffsets tug3TextOffsets[] = {
-	{ TX_SPEAKER_KIRK, 5426, 0, 0, 0 },
-	{ TX_SPEAKER_MCCOY, 5437, 0, 0, 0 },
-	{ TX_SPEAKER_SPOCK, 5447, 0, 0, 0 },
-	{ TX_SPEAKER_SULU, 5457, 0, 0, 0 },
-	{ TX_SPEAKER_SHIPS_COMPUTER, 5466, 0, 0, 0 },
-	{ TX_SPEAKER_CHRISTENSEN, 5482, 0, 0, 0 },
-	{ TX_SPEAKER_ELASI_CERETH, 5498, 0, 0, 0 },
-	{ TX_SPEAKER_ELASI_CLANSMAN, 5511, 0, 0, 0 },
-	{ TX_SPEAKER_STARFLEET, 5526, 0, 0, 0 },
-	{ TX_SPEAKER_SCOTT, 5536, 0, 0, 0 },
-	{ TX_TUG3_001, 4914, 0, 0, 0 },
-	{ TX_TUG3_002, 6171, 0, 0, 0 },
-	{ TX_TUG3_003, 6121, 0, 0, 0 },
-	{ TX_TUG3_004, 6026, 0, 0, 0 },
-	{ TX_TUG3_005, 5224, 0, 0, 0 },
-	{ TX_TUG3_006, 3810, 0, 0, 0 },
-	{ TX_TUG3_007, 3553, 0, 0, 0 },
-	{ TX_TUG3_008, 3349, 0, 0, 0 },
-	{ TX_TUG3_009, 3231, 0, 0, 0 },
-	{ TX_TUG3_011, 3117, 0, 0, 0 },
-	{ TX_TUG3_013, 3042, 0, 0, 0 },
-	{ TX_TUG3_015, 3618, 0, 0, 0 },
-	{ TX_TUG3_F27, 2224, 0, 0, 0 },
-	{ TX_TUG3_S07, 3867, 0, 0, 0 },
-	{ TX_TUG3_S08, 5282, 0, 0, 0 },
-	{ TX_TUG3L003, 3470, 0, 0, 0 },
-	{ TX_TUG3L080, 2701, 0, 0, 0 },
-	{ TX_TUG3L081,  792, 0, 0, 0 },
-	{ TX_TUG3L083, 2480, 0, 0, 0 },
-	{ TX_TUG3L084, 2057, 0, 0, 0 },
-	{ TX_TUG3N000, 5824, 0, 0, 0 },
-	{ TX_TUG3N001, 2845, 0, 0, 0 },
-	{ TX_TUG3N002, 5873, 0, 0, 0 },
-	{ TX_TUG3N003, 5634, 0, 0, 0 },
-	{ TX_TUG3N004, 5751, 0, 0, 0 },
-	{ TX_TUG3N005, 5694, 0, 0, 0 },
-	{ TX_TUG3N006, 4725, 0, 0, 0 },
-	{ TX_TUG3N007,  421, 0, 0, 0 },
-	{ TX_TUG3N008, 5547, 0, 0, 0 },
-	{ TX_COMPA180, 3724, 0, 0, 0 },
-	{ TX_COMPU181, 4618, 0, 0, 0 },
-	{ TX_COMPU182, 4535, 0, 0, 0 },
-	{          -1, 0,    0, 0, 0 }
+	{ TX_SPEAKER_KIRK, 5426, 5136, 5748, 5748, 5167, 5393, 5401, 5167, 5504 },
+	{ TX_SPEAKER_MCCOY, 5437, 5147, 5759, 5759, 5178, 5406, 5412, 5178, 5515 },
+	{ TX_SPEAKER_SPOCK, 5447, 5157, 5769, 5769, 5188, 5416, 5422, 5188, 5525 },
+	{ TX_SPEAKER_SULU, 5457, 5167, 5779, 5779, 5198, 5426, 5432, 5198, 5535 },
+	{ TX_SPEAKER_SHIPS_COMPUTER, 5466, 5176, 5788, 5788, 5207, 5435, 5441, 5207, 5544 },
+	{ TX_SPEAKER_CHRISTENSEN, 5482, 5192, 5804, 5804, 5223, 5450, 5457, 5223, 5560 },
+	{ TX_SPEAKER_ELASI_CERETH, 5498, 5208, 5820, 5820, 5239, 5466, 5473, 5239, 5576 },
+	{ TX_SPEAKER_ELASI_CLANSMAN, 5511, 5221, 5833, 5833, 5252, 5479, 5486, 5252, 5589 },
+	{ TX_SPEAKER_STARFLEET, 5526, 5236, 5848, 5848, 5267, 5494, 5501, 5267, 5604 },
+	{ TX_SPEAKER_SCOTT, 5536, 5246, 5858, 5858, 5277, 5504, 5511, 5277, 5614 },
+	{ TX_TUG3_001, 4914, 4670, 5212, 5208, 4684, 4889, 4894, 4684, 4992 },
+	{ TX_TUG3_002, 6171, 5791, 6576, 6547, 5822, 6074, 6110, 5822, 6249 },
+	{ TX_TUG3_003, 6121, 5726, 6461, 6447, 5757, 5988, 6009, 5757, 6199 },
+	{ TX_TUG3_004, 6026, 5646, 6356, 6341, 5677, 5897, 5919, 5677, 6104 },
+	{ TX_TUG3_005, 5224, 4965, 5538, 5541, 4995, 5216, 5221, 4995, 5302 },
+	{ TX_TUG3_006, 3810, 3642, 4046, 4054, 3657, 3811, 3804, 3657, 3888 },
+	{ TX_TUG3_007, 3553, 3430, 3760, 3786, 3446, 3578, 3563, 3446, 3631 },
+	{ TX_TUG3_008, 3349, 3256, 3523, 3565, 3256, 3371, 3341, 3256, 3427 },
+	{ TX_TUG3_009, 3231, 3153, 3399, 3438, 3153, 3254, 3232, 3153, 3309 },
+	{ TX_TUG3_011, 3117, 3054, 3269, 3313, 3054, 3144, 3117, 3054, 3195 },
+	{ TX_TUG3_013, 3042, 2921, 3095, 3126, 2921, 2981, 2973, 2921, 3032 },
+	{ TX_TUG3_015, 3618, 3480, 3829, 3853, 3496, 3630, 3617, 3496, 3696 },
+	{ TX_TUG3_F27, 2224, 2173, 2251, 2261, 2173, 2206, 2200, 2173, 2214 },
+	{ TX_TUG3_S07, 3867, 3684, 4101, 4116, 3699, 3858, 3844, 3699, 3945 },
+	{ TX_TUG3_S08, 5282, 5008, 5602, 5604, 5038, 5264, 5270, 5038, 5360 },
+	{ TX_TUG3L003, 3470, 3362, 3657, 3698, 3362, 3489, 3460, 3362, 3548 },
+	{ TX_TUG3L080, 2701, 2610, 2742, 2767, 2610, 2652, 2650, 2610, 2691 },
+	{ TX_TUG3L081,  792, 771, 808, 812, 771, 787, 787, 771, 782 },
+	{ TX_TUG3L083, 2480, 2414, 2517, 2539, 2414, 2449, 2450, 2414, 2470 },
+	{ TX_TUG3L084, 2057, 2021, 2076, 2085, 2021, 2045, 2040, 2021, 2047 },
+	{ TX_TUG3N000, 5824, 5474, 6166, 6142, 5505, 5728, 5759, 5505, 5902 },
+	{ TX_TUG3N001, 2845, 2739, 2897, 2925, 2739, 2795, 2790, 2739, 2835 },
+	{ TX_TUG3N002, 5873, 5508, 6212, 6194, 5539, 5765, 5790, 5539, 5951 },
+	{ TX_TUG3N003, 5634, 5329, 5964, 5953, 5360, 5584, 5602, 5360, 5712 },
+	{ TX_TUG3N004, 5751, 5416, 6088, 6070, 5447, 5671, 5696, 5447, 5829 },
+	{ TX_TUG3N005, 5694, 5374, 6027, 6017, 5405, 5633, 5650, 5405, 5772 },
+	{ TX_TUG3N006, 4725, 4496, 4992, 4991, 4512, 4687, 4689, 4512, 4803 },
+	{ TX_TUG3N007,  421, 415, 421, 421, 415, 415, 415, 415, 411 },
+	{ TX_TUG3N008, 5547, 5257, 5869, 5869, 5288, 5515, 5522, 5288, 5625 },
+	{ TX_COMPA180, 3724, 3571, 3962, 3979, 3587, 3746, 3735, 3587, 3802 },
+	{ TX_COMPU181, 4618, 4404, 4865, 4876, 4420, 4588, 4578, 4420, 4696 },
+	{ TX_COMPU182, 4535, 4336, 4771, 4784, 4352, 4511, 4499, 4352, 4613 },
+	{          -1, 0,    0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 extern const RoomText tug3Texts[] = {
-	{ TX_TUG3_012, Common::EN_ANY, "" },
+	{ TX_TUG3_012, Common::EN_ANY, "#TUG3\\TUG3_012#I'm a doctor, not a space jockey. Talk to Mr. Sulu about fixing our orbit." },
+	{ TX_TUG3_012, Common::DE_DEU, "#TUG3\\TUG3_012#Ich bin Arzt, kein Weltraum-Jockey. Hol dir Mr. Sulu wenn du Probleme mit der Umlaufbahn hast." },
+	{ TX_TUG3_012, Common::FR_FRA, "#TUG3\\TUG3_012#Je suis m\xe9" "decin, pas jockey de l'espace. Demandez \xe0 M. Sulu de r\xe9gler notre orbite." },
 	{ -1, Common::UNK_LANG, "" }
 };
 
@@ -442,10 +443,9 @@ void Room::tug3TalkToMccoy() {
 		if (_awayMission->tug.orbitalDecayCounter >= 10) {
 			if (_awayMission->tug.orbitalDecayCounter < 16)
 				showText(TX_SPEAKER_MCCOY, TX_TUG3_011);
-		} else if (_awayMission->tug.orbitalDecayCounter != 0) {
-			// BUGFIX: original game displays a blank textbox. An appropriate audio file
-			// exists, but the corresponding text was written from scratch for ScummVM.
-			// TODO: check if original floppy version has text for this.
+		} else {
+			// BUGFIX: the English CD version displays a blank textbox. Use the text
+			// of the floppy version, for which the CD has an audio file.
 			showText(TX_SPEAKER_MCCOY, TX_TUG3_012);
 		}
 	} else
@@ -494,8 +494,8 @@ void Room::tug3UseCommunicator() {
 			playMidiMusicTracks(MIDITRACK_NONE);
 
 			_awayMission->disableInput = true;
-			// FIXME: Why do we need to clip the mission score? It shouldn't have gone above 32
-			_awayMission->tug.missionScore = CLIP<int16>(_awayMission->tug.missionScore, 0, 32);
+			if (_awayMission->tug.missionScore < 0)
+				_awayMission->tug.missionScore = 0;
 			endMission(_awayMission->tug.missionScore, _awayMission->tug.field2b, _awayMission->tug.field2d);
 		}
 	}
@@ -586,8 +586,8 @@ void Room::tug3SecurityTeamBeamedIn() {
 
 	playMidiMusicTracks(MIDITRACK_NONE);
 	_awayMission->disableInput = true;
-	// FIXME: Why do we need to clip the mission score? It shouldn't have gone above 32
-	_awayMission->tug.missionScore = CLIP<int16>(_awayMission->tug.missionScore, 0, 32);
+	if (_awayMission->tug.missionScore < 0)
+		_awayMission->tug.missionScore = 0;
 	endMission(_awayMission->tug.missionScore, _awayMission->tug.field2b, _awayMission->tug.field2d);
 }
 
